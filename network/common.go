@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/theparanoids/ashirt/shared"
+	"github.com/theparanoids/ashirt/signer"
 )
 
 var client = &http.Client{}
@@ -43,7 +43,7 @@ func SetSecretKey(key []byte) {
 // Note: This should be called immediately before sending a request.
 func addAuthentication(req *http.Request) error {
 	req.Header.Set("Date", time.Now().In(time.FixedZone("GMT", 0)).Format(time.RFC1123))
-	authorization, err := shared.BuildClientRequestAuthorization(req, accessKey, secretKey)
+	authorization, err := signer.BuildClientRequestAuthorization(req, accessKey, secretKey)
 	if err != nil {
 		return err
 	}
