@@ -11,3 +11,6 @@ conf.yaml
 
 # Others
 cmd/aterm/aterm
+dist
+.env
+.tool-versions
