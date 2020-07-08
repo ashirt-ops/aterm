@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/theparanoids/ashirt/signer"
+	"github.com/theparanoids/ashirt-server/signer"
 )
 
 var client = &http.Client{}
