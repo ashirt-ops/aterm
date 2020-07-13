@@ -296,8 +296,8 @@ github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXf
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.4.0 h1:2E4SXV/wtOkTonXsotYi4li6zVWxYlZuYNCXe9XRJyk=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
-github.com/theparanoids/ashirt v0.0.0-20200707003127-87f5de69d406 h1:i7sG/8Bq2uaSWpDQJ876w4TbfcBxquAz6HIUgikT8HU=
-github.com/theparanoids/ashirt v0.0.0-20200707003127-87f5de69d406/go.mod h1:vYYIRemMyliBh/eRwtP65j2M5DP0q+szHbApsU1Kg2E=
+github.com/theparanoids/ashirt-server v0.0.0-20200708052605-7c5b90cde657 h1:yna6n17pONuqLjcyqjfhF51XGBxegZ60ZRcc3e2zBrY=
+github.com/theparanoids/ashirt-server v0.0.0-20200708052605-7c5b90cde657/go.mod h1:sGGnEYzuZj7fr+Viz2k6AuL8HDbL7NJ6skxxLsxeiIE=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20170815181823-89b8d40f7ca8/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
 github.com/ugorji/go/codec v0.0.0-20181204163529-d75b2dcb6bc8/go.mod h1:VFNgLljTbGfSG7qAOspJ7OScBnGdDN/yBr0sguwnwf0=
 github.com/urfave/cli v1.20.0/go.mod h1:70zkFmudgCuE/ngEzBv17Jvp/497gISqfk5gWijbERA=
