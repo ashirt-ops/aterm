@@ -24,13 +24,12 @@ type TermRecorderConfig struct {
 	ConfigVersion   int64  `yaml:"configVersion"`
 	OutputDir       string `yaml:"outputDir"      split_words:"true"`
 	OutputFileName  string `yaml:"-"              split_words:"true"`
-	OperationID     int64  `yaml:"operationID"    split_words:"true"`
+	OperationSlug   string `yaml:"operationSlug"  split_words:"true"`
 	RecordingShell  string `yaml:"recordingShell" split_words:"true"`
 	APIURL          string `yaml:"apiURL"         split_words:"true" envconfig:"api_url"`
 	AccessKey       string `yaml:"accessKey"      split_words:"true"`
 	SecretKeyBase64 string `yaml:"secretKey"      split_words:"true" envconfig:"secret_key"`
 	SecretKey       []byte `yaml:"-"`
-	// OperationSlug   int     `yaml:"operationSlug" split_words:"true"`
 
 	issues []string
 }
@@ -115,8 +114,7 @@ func (t *TermRecorderConfig) parseFile(reader io.Reader) {
 func (t *TermRecorderConfig) parseCli() {
 	attachStringFlag("output-dir", "", "Location where output file will be stored", t.OutputDir, &t.OutputDir)
 	attachStringFlag("output-file", "o", "Name of the output file", t.OutputFileName, &t.OutputFileName)
-
-	attachIntFlag("operation", "", "Operation ID to use when saving evidence", t.OperationID, &t.OperationID)
+	attachStringFlag("operation", "", "Operation Slug to use when saving evidence", t.OperationSlug, &t.OperationSlug)
 
 	attachStringFlag("shell", "s", "Name of the output file", t.RecordingShell, &t.RecordingShell)
 	attachStringFlag("svc", "", "Name of the output file", t.APIURL, &t.APIURL)

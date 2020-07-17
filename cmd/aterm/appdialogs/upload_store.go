@@ -22,23 +22,23 @@ type UploadDefaults struct {
 // recorded terminal session to the remote server
 //
 // UploadDialog exposes the following fields:
-// OperationID: The "name" of the operation on the ashirt site (i.e. what to associate the uploaded content to)
+// OperationSlug: The "name" of the operation on the ashirt site (i.e. what to associate the uploaded content to)
 // FilePath: the name/location of the file to be uploaded
 type uploadStore struct {
-	PreferredOperationID int64
-	DialogInput          io.ReadCloser
-	Operations           []network.Operation
-	DefaultData          UploadDefaults
+	PreferredOperationSlug string
+	DialogInput            io.ReadCloser
+	Operations             []network.Operation
+	DefaultData            UploadDefaults
 }
 
 var uploadStoreData = uploadStore{}
 
-func SetBasicUploadData(operationID int64, inputSrc io.ReadCloser) {
+func SetBasicUploadData(operationSlug string, inputSrc io.ReadCloser) {
 	uploadStoreData = uploadStore{
-		PreferredOperationID: operationID,
-		DialogInput:          inputSrc,
-		Operations:           uploadStoreData.Operations,
-		DefaultData:          UploadDefaults{},
+		PreferredOperationSlug: operationSlug,
+		DialogInput:            inputSrc,
+		Operations:             uploadStoreData.Operations,
+		DefaultData:            UploadDefaults{},
 	}
 }
 

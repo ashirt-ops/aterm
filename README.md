@@ -19,7 +19,7 @@ Currently, the configuration file is expected to be found here: `$(HOME)/.config
 | --------------------- | ------------------------------------- | ---------------- | --------------------------------------------------------------------------- |
 | outputDir             | ASHIRT_TERM_RECORDER_OUTPUT_DIR       | --output-dir     | Determines where to store recording files. Defaults to OS temp directory    |
 | recordingShell        | ASHIRT_TERM_RECORDER_RECORDING_SHELL  | --shell       -s | Which shell to use when starting up (defaults to env's SHELL)               |
-| operationID           | ASHIRT_TERM_RECORDER_OPERATION_ID     | --operation      | Which operation to upload to (by default -- can be selected during upload)  |
+| operationSlug         | ASHIRT_TERM_RECORDER_OPERATION_SLUG   | --operation      | Which operation to upload to (by default -- can be selected during upload)  |
 | apiURL                | ASHIRT_TERM_RECORDER_API_URL          | --svc            | Where the **backend** service is located.                                   |
 | N/A                   | ASHIRT_TERM_RECORDER_OUTPUT_FILE_NAME | --output-file -o | What filename to use when writing the file locally (and remotely as well)   |
 | accessKey             | ASHIRT_TERM_RECORDER_ACCESS_KEY       | N/A              | The Access Key needed to connect with the backend (created on the frontend) |

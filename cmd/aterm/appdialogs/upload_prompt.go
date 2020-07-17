@@ -116,10 +116,10 @@ func tryUpload() error {
 		_, name := filepath.Split(path)
 
 		input := network.UploadInput{
-			OperationID: opIDFromSlug(slugResp.Value.(string)),
-			Description: description,
-			Filename:    name,
-			Content:     bytes.NewReader(data),
+			OperationSlug: slugResp.Value.(string),
+			Description:   description,
+			Filename:      name,
+			Content:       bytes.NewReader(data),
 		}
 
 		var wg sync.WaitGroup

@@ -14,14 +14,14 @@ import (
 func TestUpload(t *testing.T) {
 	t.Skip("skipping network tests")
 	var written []byte
-	makeServer(Route{"POST", "/api/operations/777/evidence", newRequestRecorder(201, "", &written)})
+	makeServer(Route{"POST", "/api/operations/first/evidence", newRequestRecorder(201, "", &written)})
 	network.SetBaseURL("http://localhost" + testPort)
 
 	uploadInput := network.UploadInput{
-		OperationID: 777,
-		Description: "abcd",
-		Filename:    "dolphin",
-		Content:     bytes.NewReader([]byte("abc123")),
+		OperationSlug: "first",
+		Description:   "abcd",
+		Filename:      "dolphin",
+		Content:       bytes.NewReader([]byte("abc123")),
 	}
 
 	err := network.UploadToAshirt(uploadInput)
@@ -32,14 +32,14 @@ func TestUpload(t *testing.T) {
 func TestUploadFailedWithJSONError(t *testing.T) {
 	t.Skip("skipping network tests")
 	var written []byte
-	makeServer(Route{"POST", "/api/operations/778/evidence", newRequestRecorder(402, `{"error": "oops"}`, &written)})
+	makeServer(Route{"POST", "/api/operations/second/evidence", newRequestRecorder(402, `{"error": "oops"}`, &written)})
 	network.SetBaseURL("http://localhost" + testPort)
 
 	uploadInput := network.UploadInput{
-		OperationID: 778,
-		Description: "abcd",
-		Filename:    "dolphin",
-		Content:     bytes.NewReader([]byte("abc123")),
+		OperationSlug: "second",
+		Description:   "abcd",
+		Filename:      "dolphin",
+		Content:       bytes.NewReader([]byte("abc123")),
 	}
 
 	err := network.UploadToAshirt(uploadInput)
@@ -49,14 +49,14 @@ func TestUploadFailedWithJSONError(t *testing.T) {
 func TestUploadFailedWithUnknownJSON(t *testing.T) {
 	t.Skip("skipping network tests")
 	var written []byte
-	makeServer(Route{"POST", "/api/operations/776/evidence", newRequestRecorder(402, `{"something": "value"}`, &written)})
+	makeServer(Route{"POST", "/api/operations/third/evidence", newRequestRecorder(402, `{"something": "value"}`, &written)})
 	network.SetBaseURL("http://localhost" + testPort)
 
 	uploadInput := network.UploadInput{
-		OperationID: 776,
-		Description: "abcd",
-		Filename:    "dolphin",
-		Content:     bytes.NewReader([]byte("abc123")),
+		OperationSlug: "third",
+		Description:   "abcd",
+		Filename:      "dolphin",
+		Content:       bytes.NewReader([]byte("abc123")),
 	}
 
 	err := network.UploadToAshirt(uploadInput)
