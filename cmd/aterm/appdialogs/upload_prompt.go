@@ -18,6 +18,9 @@ import (
 	"github.com/theparanoids/aterm/network"
 )
 
+var errorCancelled = errors.New("Cancelled")
+var errorAlreadyExists = errors.New("Already Exists")
+
 var operationOptions = []dialog.Option{}
 
 var menuOptionUpload = dialog.Option{Label: "Upload a file to the server", Action: showUploadSubmenu}
@@ -197,6 +200,8 @@ func askForTags(operationSlug string, allTags []dtos.Tag, selectedTagIDs []int64
 			if err != nil {
 				if err == errorCancelled {
 					fmt.Println("Tag creation cancelled")
+				} else if err == errorAlreadyExists {
+					toggleValue(&selectedTagIDs, newTag.ID)
 				} else {
 					fmt.Println("Unable to create tag. Error: " + err.Error())
 				}
@@ -205,15 +210,7 @@ func askForTags(operationSlug string, allTags []dtos.Tag, selectedTagIDs []int64
 				selectedTagIDs = append(selectedTagIDs, newTag.ID)
 			}
 		} else {
-			valIndex := findIndex(selectedTagIDs, choice)
-			if valIndex > -1 {
-				// swap found element with last element, then trim off the end
-				lastIndex := len(selectedTagIDs) - 1
-				selectedTagIDs[valIndex], selectedTagIDs[lastIndex] = selectedTagIDs[lastIndex], selectedTagIDs[valIndex]
-				selectedTagIDs = selectedTagIDs[:lastIndex]
-			} else {
-				selectedTagIDs = append(selectedTagIDs, choice)
-			}
+			toggleValue(&selectedTagIDs, choice)
 		}
 	}
 
@@ -233,6 +230,13 @@ func askForNewTag(operationSlug string, allTags []dtos.Tag) (*dtos.Tag, error) {
 	name, err := UserQuery("Enter a new tag name", nil)
 	if err != nil {
 		return nil, err
+	}
+	lowerName := strings.ToLower(name)
+
+	for _, t := range allTags {
+		if lowerName == strings.ToLower(t.Name) {
+			return &t, errorAlreadyExists
+		}
 	}
 
 	if name == "" {
@@ -284,7 +288,17 @@ func findIndex(haystack []int64, needle int64) int {
 	return -1
 }
 
-var errorCancelled = errors.New("Cancelled")
+func toggleValue(numbs *[]int64, newNumb int64) {
+	valIndex := findIndex(*numbs, newNumb)
+	if valIndex > -1 {
+		// swap found element with last element, then trim off the end (loses order)
+		lastIndex := len(*numbs) - 1
+		(*numbs)[valIndex], (*numbs)[lastIndex] = (*numbs)[lastIndex], (*numbs)[valIndex]
+		*numbs = (*numbs)[:lastIndex]
+	} else {
+		*numbs = append(*numbs, newNumb)
+	}
+}
 
 func tagsToNames(tags []dtos.Tag) string {
 	selectedTagNames := make([]string, len(tags))
