@@ -18,6 +18,7 @@ type UploadInput struct {
 	OperationSlug string
 	Description   string
 	Filename      string
+	TagIDs        []int64
 	Content       io.Reader
 }
 
@@ -29,9 +30,11 @@ func UploadToAshirt(ui UploadInput) error {
 	url := apiURL + "/operations/" + ui.OperationSlug + "/evidence"
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
+	jsonTags, _ := json.Marshal(ui.TagIDs)
 	fields := map[string]string{
 		"notes":       ui.Description,
 		"contentType": "terminal-recording",
+		"tagIds":      string(jsonTags),
 	}
 	for k, v := range fields {
 		err := writer.WriteField(k, v)
