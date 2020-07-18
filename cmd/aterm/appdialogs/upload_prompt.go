@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
+	"github.com/theparanoids/ashirt-server/backend/dtos"
 	"github.com/theparanoids/aterm/dialog"
 	"github.com/theparanoids/aterm/fancy"
 	"github.com/theparanoids/aterm/network"
@@ -99,12 +100,21 @@ func tryUpload() error {
 	if err != nil {
 		return errors.Wrap(err, "Could not retrieve description")
 	}
+	operationSlug := slugResp.Value.(string)
+	tags, err := network.GetTags(operationSlug)
+	var selectedTags []dtos.Tag
+	if err != nil {
+		fmt.Println("Unable to retrieve tags. This can be edited after submission on the website.")
+	} else {
+		selectedTags = askForTags(operationSlug, tags, []int64{})
+	}
 
 	// show a recap pre-upload
 	fmt.Println(strings.Join([]string{
 		fancy.WithBold("This will upload:", 0),
 		fancy.WithBold("  File: ", 0) + fancy.WithBold(path, fancy.Yellow),
-		fancy.WithBold("  Operation: ", 0) + fancy.WithBold(slugResp.Value.(string), fancy.Yellow),
+		fancy.WithBold("  Operation: ", 0) + fancy.WithBold(operationSlug, fancy.Yellow),
+		fancy.WithBold("  Tags: ", 0) + fancy.WithBold(tagsToNames(selectedTags), fancy.Yellow),
 		fancy.WithBold("  Description: ", 0) + fancy.WithBold(description, fancy.Yellow),
 	}, "\n"))
 	continueResp, err := dialog.YesNoPrompt("Do you want to continue?", "", uploadStoreData.DialogInput)
@@ -119,6 +129,7 @@ func tryUpload() error {
 			OperationSlug: slugResp.Value.(string),
 			Description:   description,
 			Filename:      name,
+			TagIDs:        tagsToIDs(selectedTags),
 			Content:       bytes.NewReader(data),
 		}
 
@@ -163,4 +174,130 @@ func updateOperationOptions() (_ dialog.OptionActionResponse) {
 	}
 	fmt.Printf("Loaded %v operations\n", len(uploadStoreData.Operations))
 	return
+}
+
+func askForTags(operationSlug string, allTags []dtos.Tag, selectedTagIDs []int64) []dtos.Tag {
+	const stopVal int64 = -1
+	const createVal int64 = -2
+
+	doneOpt := dialog.Option{Label: "<Done>", Action: dialog.ChooseAction(stopVal)}
+	createOpt := dialog.Option{Label: "<New>", Action: dialog.ChooseAction(createVal)}
+
+	for {
+		selection := askForSingleTag(allTags, selectedTagIDs, []dialog.Option{doneOpt, createOpt})
+		if selection.Err != nil {
+			return []dtos.Tag{}
+		}
+		choice := selection.Value.(int64)
+
+		if choice == stopVal {
+			break
+		} else if choice == createVal {
+			newTag, err := askForNewTag(operationSlug, allTags)
+			if err != nil {
+				if err == errorCancelled {
+					fmt.Println("Tag creation cancelled")
+				} else {
+					fmt.Println("Unable to create tag. Error: " + err.Error())
+				}
+			} else {
+				allTags = append(allTags, *newTag)
+				selectedTagIDs = append(selectedTagIDs, newTag.ID)
+			}
+		} else {
+			valIndex := findIndex(selectedTagIDs, choice)
+			if valIndex > -1 {
+				// swap found element with last element, then trim off the end
+				lastIndex := len(selectedTagIDs) - 1
+				selectedTagIDs[valIndex], selectedTagIDs[lastIndex] = selectedTagIDs[lastIndex], selectedTagIDs[valIndex]
+				selectedTagIDs = selectedTagIDs[:lastIndex]
+			} else {
+				selectedTagIDs = append(selectedTagIDs, choice)
+			}
+		}
+	}
+
+	submitTags := make([]dtos.Tag, len(selectedTagIDs))
+	for i, tagID := range selectedTagIDs {
+		for _, tag := range allTags {
+			if tagID == tag.ID {
+				submitTags[i] = tag
+			}
+		}
+	}
+
+	return submitTags
+}
+
+func askForNewTag(operationSlug string, allTags []dtos.Tag) (*dtos.Tag, error) {
+	name, err := UserQuery("Enter a new tag name", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if name == "" {
+		return nil, errorCancelled
+	}
+	return network.CreateTag(operationSlug, name, network.RandomTagColor())
+}
+
+func askForSingleTag(allTags []dtos.Tag, selectedTagIDs []int64, alwaysOptions []dialog.Option) dialog.OptionActionResponse {
+	firstTagOptions := make([]dialog.Option, 0, len(selectedTagIDs))
+	lastTagOptions := make([]dialog.Option, 0, len(allTags))
+	selectedTagNames := make([]string, 0, len(selectedTagIDs))
+
+	for _, tag := range allTags {
+		added := false
+		for _, selectedTagID := range selectedTagIDs {
+			if tag.ID == selectedTagID {
+				selectedTagNames = append(selectedTagNames, tag.Name)
+				firstTagOptions = append(firstTagOptions, dialog.Option{
+					Label:  fmt.Sprintf("%v (Deselect)", tag.Name),
+					Action: dialog.ChooseAction(tag.ID),
+				})
+				added = true
+				break
+			}
+		}
+		if !added {
+			lastTagOptions = append(lastTagOptions, dialog.Option{
+				Label:  tag.Name,
+				Action: dialog.ChooseAction(tag.ID),
+			})
+		}
+	}
+
+	allTagOptions := alwaysOptions
+	allTagOptions = append(allTagOptions, firstTagOptions...)
+	allTagOptions = append(allTagOptions, lastTagOptions...)
+
+	msg := fmt.Sprintf("Choose your tags (Currently: %v)", fancy.WithBold(strings.Join(selectedTagNames, ", "), 0))
+	return Select(msg, allTagOptions)
+}
+
+func findIndex(haystack []int64, needle int64) int {
+	for i := 0; i < len(haystack); i++ {
+		if haystack[i] == needle {
+			return i
+		}
+	}
+	return -1
+}
+
+var errorCancelled = errors.New("Cancelled")
+
+func tagsToNames(tags []dtos.Tag) string {
+	selectedTagNames := make([]string, len(tags))
+	for i, tag := range tags {
+		selectedTagNames[i] = tag.Name
+	}
+	return strings.Join(selectedTagNames, ", ")
+}
+
+func tagsToIDs(tags []dtos.Tag) []int64 {
+	tagIDs := make([]int64, len(tags))
+	for i, tag := range tags {
+		tagIDs[i] = tag.ID
+	}
+	return tagIDs
 }
