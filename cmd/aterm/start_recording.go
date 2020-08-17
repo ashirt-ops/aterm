@@ -9,8 +9,8 @@ import (
 	"os"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/pkg/errors"
 	"github.com/theparanoids/aterm/common"
+	"github.com/theparanoids/aterm/errors"
 	"github.com/theparanoids/aterm/eventers"
 	"github.com/theparanoids/aterm/formatters"
 	"github.com/theparanoids/aterm/recorders"

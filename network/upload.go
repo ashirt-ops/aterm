@@ -6,13 +6,14 @@ package network
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 
-	"github.com/pkg/errors"
 	"github.com/theparanoids/ashirt-server/backend/dtos"
+	"github.com/theparanoids/aterm/errors"
 )
 
 const (
@@ -26,7 +27,7 @@ const (
 	ContentTypeNone = "none"
 )
 
-// UploadInput provides a manifest for outgoing evidence. 
+// UploadInput provides a manifest for outgoing evidence.
 type UploadInput struct {
 	OperationSlug string
 	Description   string
@@ -98,10 +99,9 @@ func UploadToAshirt(ui UploadInput) (*dtos.Evidence, error) {
 		}
 		reason, ok := parsed["error"]
 		if !ok {
-			return nil, errors.New("Unable to upload file")
-
+			reason = "(unknown server error)"
 		}
-		return nil, errors.New("Unable to upload file: " + reason)
+		return nil, fmt.Errorf("Unable to upload file: " + reason)
 	}
 	var evi dtos.Evidence
 	err = readResponseBody(&evi, resp.Body)

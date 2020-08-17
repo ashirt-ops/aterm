@@ -9,8 +9,8 @@ import (
 	"math/rand"
 	"net/http"
 
-	"github.com/pkg/errors"
 	"github.com/theparanoids/ashirt-server/backend/dtos"
+	"github.com/theparanoids/aterm/errors"
 )
 
 // GetTags retrieves a list of all tags from the server for the given operation slug

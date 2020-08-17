@@ -6,8 +6,8 @@ package network
 import (
 	"net/http"
 
-	"github.com/pkg/errors"
 	"github.com/theparanoids/ashirt-server/backend/dtos"
+	"github.com/theparanoids/aterm/errors"
 )
 
 const errCannotConnectMsg = "Unable to connect to the server"

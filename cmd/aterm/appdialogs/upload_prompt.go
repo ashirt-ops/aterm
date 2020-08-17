@@ -11,15 +11,15 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pkg/errors"
 	"github.com/theparanoids/ashirt-server/backend/dtos"
 	"github.com/theparanoids/aterm/dialog"
+	"github.com/theparanoids/aterm/errors"
 	"github.com/theparanoids/aterm/fancy"
 	"github.com/theparanoids/aterm/network"
 )
 
-var errorCancelled = errors.New("Cancelled")
-var errorAlreadyExists = errors.New("Already Exists")
+var errorCancelled = fmt.Errorf("Cancelled")
+var errorAlreadyExists = fmt.Errorf("Already Exists")
 
 var operationOptions = []dialog.Option{}
 
@@ -78,7 +78,7 @@ func showUploadSubmenu() dialog.OptionActionResponse {
 func tryUpload() error {
 	defaults := uploadStoreData.DefaultData
 	if !network.BaseURLSet() {
-		return errors.New("No service url specified -- check configuration")
+		return fmt.Errorf("No service url specified -- check configuration")
 	}
 
 	path, err := UserQuery("Enter a filename", &defaults.FilePath)

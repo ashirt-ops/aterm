@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/kelseyhightower/envconfig"
-	"github.com/pkg/errors"
+	"github.com/theparanoids/aterm/errors"
 	"gopkg.in/yaml.v2"
 )
 

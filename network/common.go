@@ -5,13 +5,14 @@ package network
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/theparanoids/ashirt-server/signer"
+	"github.com/theparanoids/aterm/errors"
 )
 
 var client = &http.Client{}
@@ -58,12 +59,12 @@ func addAuthentication(req *http.Request) error {
 func evaluateResponseStatusCode(code int) error {
 	switch {
 	case code == http.StatusUnauthorized:
-		return errors.New("Unable to authenticate with server. Please check credentials")
+		return fmt.Errorf("Unable to authenticate with server. Please check credentials")
 	case code == http.StatusInternalServerError:
-		return errors.New("Server encountered an error")
+		return fmt.Errorf("Server encountered an error")
 	}
 	if code != http.StatusOK && code != http.StatusCreated {
-		return errors.New(errCannotConnectMsg)
+		return fmt.Errorf(errCannotConnectMsg)
 	}
 	return nil
 }
