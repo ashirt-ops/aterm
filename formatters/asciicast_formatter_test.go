@@ -27,8 +27,8 @@ func TestAsciiCastFormatterWriteFooter(t *testing.T) {
 func TestAsciiCastDefaultUsesRealTime(t *testing.T) {
 	now := time.Now()
 	asciiNow := ASCIICast.clock.Now()
-	// not sure if we can really do a better test -- this ensures that now is what asciiCast uses as now
-	// are nearly the same, which is probably good enough.
+	// not sure if we can really do a better test -- this ensures that "now" is what asciiCast uses
+	// as "now" are nearly the same, which is probably good enough.
 	assert.True(t, asciiNow.Sub(now) < 1*time.Second)
 }
 

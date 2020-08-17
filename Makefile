@@ -37,6 +37,7 @@ build-osx: update
 
 .PHONY: run
 run:
+	# The below line will load in the .env file into the shell, to use the settings defined there.
 	$(eval export $(shell sed -ne 's/ *#.*$$//; /./ s/=.*$$// p' .env))
 	go run cmd/aterm/*.go
 
