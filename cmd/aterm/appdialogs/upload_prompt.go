@@ -142,7 +142,7 @@ func tryUpload() error {
 		stop := false
 		var err error
 		go func() {
-			err = network.UploadToAshirt(input)
+			_, err = network.UploadToAshirt(input)
 			wg.Done()
 		}()
 		go dialog.ShowLoadingAnimation("Loading", &stop)
