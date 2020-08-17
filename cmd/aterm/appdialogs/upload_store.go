@@ -6,6 +6,7 @@ package appdialogs
 import (
 	"io"
 
+	"github.com/theparanoids/ashirt-server/backend/dtos"
 	"github.com/theparanoids/aterm/isthere"
 	"github.com/theparanoids/aterm/network"
 )
@@ -27,7 +28,7 @@ type UploadDefaults struct {
 type uploadStore struct {
 	PreferredOperationSlug string
 	DialogInput            io.ReadCloser
-	Operations             []network.Operation
+	Operations             []dtos.Operation
 	DefaultData            UploadDefaults
 }
 
