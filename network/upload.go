@@ -14,9 +14,22 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	// ContentTypeTerminalRecording is the content type used for any terminal recording
+	ContentTypeTerminalRecording = "terminal-recording"
+	// ContentTypeScreenshot is the content type used for images (Screenshot or otherwise)
+	ContentTypeScreenshot = "image"
+	// ContentTypeCodeblock is the content type used for code blocks/text-based content
+	ContentTypeCodeblock = "codeblock"
+	// ContentTypeNone is the content type used for no-content evidence (i.e. description only)
+	ContentTypeNone = "none"
+)
+
+// UploadInput provides a manifest for outgoing evidence. 
 type UploadInput struct {
 	OperationSlug string
 	Description   string
+	ContentType   string
 	Filename      string
 	TagIDs        []int64
 	Content       io.Reader
@@ -33,7 +46,7 @@ func UploadToAshirt(ui UploadInput) error {
 	jsonTags, _ := json.Marshal(ui.TagIDs)
 	fields := map[string]string{
 		"notes":       ui.Description,
-		"contentType": "terminal-recording",
+		"contentType": ui.ContentType,
 		"tagIds":      string(jsonTags),
 	}
 	for k, v := range fields {

@@ -131,6 +131,7 @@ func tryUpload() error {
 		input := network.UploadInput{
 			OperationSlug: slugResp.Value.(string),
 			Description:   description,
+			ContentType:   network.ContentTypeTerminalRecording,
 			Filename:      name,
 			TagIDs:        tagsToIDs(selectedTags),
 			Content:       bytes.NewReader(data),

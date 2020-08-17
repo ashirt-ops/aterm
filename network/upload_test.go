@@ -20,6 +20,7 @@ func TestUpload(t *testing.T) {
 	uploadInput := network.UploadInput{
 		OperationSlug: "first",
 		Description:   "abcd",
+		ContentType:   network.ContentTypeTerminalRecording,
 		Filename:      "dolphin",
 		Content:       bytes.NewReader([]byte("abc123")),
 	}
@@ -38,6 +39,7 @@ func TestUploadFailedWithJSONError(t *testing.T) {
 	uploadInput := network.UploadInput{
 		OperationSlug: "second",
 		Description:   "abcd",
+		ContentType:   network.ContentTypeTerminalRecording,
 		Filename:      "dolphin",
 		Content:       bytes.NewReader([]byte("abc123")),
 	}
@@ -55,6 +57,7 @@ func TestUploadFailedWithUnknownJSON(t *testing.T) {
 	uploadInput := network.UploadInput{
 		OperationSlug: "third",
 		Description:   "abcd",
+		ContentType:   network.ContentTypeTerminalRecording,
 		Filename:      "dolphin",
 		Content:       bytes.NewReader([]byte("abc123")),
 	}
