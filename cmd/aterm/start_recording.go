@@ -60,6 +60,5 @@ func record(ri RecordingInput) (RecordingOutput, error) {
 	if err != nil {
 		return result, errors.Wrap(err, `Unable to start the recording. Shell path: "`+ri.Shell+`"`)
 	}
-	err = tw.Close()
-	return result, errors.Wrap(err, "Issue closing file writer")
+	return result, errors.MaybeWrap(tw.Close(), "Issue closing file writer")
 }

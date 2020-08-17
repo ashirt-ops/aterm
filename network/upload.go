@@ -104,6 +104,5 @@ func UploadToAshirt(ui UploadInput) (*dtos.Evidence, error) {
 		return nil, fmt.Errorf("Unable to upload file: " + reason)
 	}
 	var evi dtos.Evidence
-	err = readResponseBody(&evi, resp.Body)
-	return &evi, err
+	return &evi, errors.MaybeWrap(readResponseBody(&evi, resp.Body), "Upload success, but unable to parse response")
 }

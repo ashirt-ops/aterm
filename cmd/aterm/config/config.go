@@ -56,7 +56,7 @@ func generateStaticConfig() error {
 	if err != nil {
 		return errors.Wrap(err, "Unable to write config file")
 	}
-	return errors.Wrap(outFile.Close(), "Could not close config file")
+	return errors.MaybeWrap(outFile.Close(), "Could not close config file")
 }
 
 // Parse actually reads the various data sources.

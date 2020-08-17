@@ -150,7 +150,7 @@ func tryUpload() error {
 		stop = true
 		fmt.Println(fancy.ClearLine(fancy.GreenCheck()+" File uploaded", 0))
 
-		return errors.Wrap(err, "Could not upload")
+		return errors.MaybeWrap(err, "Could not upload")
 	}
 
 	return CanceledOperation{

@@ -26,9 +26,7 @@ func GetTags(operationSlug string) ([]dtos.Tag, error) {
 		return tags, err
 	}
 
-	err = readResponseBody(&tags, resp.Body)
-
-	return tags, err
+	return tags, errors.MaybeWrap(readResponseBody(&tags, resp.Body), "Unable to retrieve tags")
 }
 
 // CreateTag generates a new tag on the backend. If successful, the new tag with tag ID will
