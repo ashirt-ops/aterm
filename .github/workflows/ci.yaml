@@ -71,7 +71,7 @@ jobs:
       run: go test -v ./...
 
     - name: Build Executable
-      run: go build -o cmd/aterm/aterm cmd/aterm/*.go
+      run: go build -ldflags '-X main.gitHash=${{ needs.store-sha8.outputs.sha8 }}' -o cmd/aterm/aterm cmd/aterm/*.go
 
     - name: package
       run: |
