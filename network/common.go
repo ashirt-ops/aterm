@@ -4,6 +4,7 @@
 package network
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -38,9 +39,12 @@ func SetAccessKey(key string) {
 	accessKey = key
 }
 
-// SetSecretKey sets the common secret key for all API actions
-func SetSecretKey(key []byte) {
-	secretKey = key
+// SetSecretKey sets the common secret key for all API actions.
+// The provided key must be a base64 string
+func SetSecretKey(key string) error {
+	var err error
+	secretKey, err = base64.StdEncoding.DecodeString(key)
+	return err
 }
 
 // addAuthentication adds Date and Authentication headers to the provided request
