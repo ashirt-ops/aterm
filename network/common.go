@@ -85,11 +85,10 @@ func readResponseBody(container interface{}, body io.Reader) error {
 func makeJSONRequest(method, url string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequest(method, url, body)
 
-	req.Header.Add("Content-Type", "application/json")
-
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Add("Content-Type", "application/json")
 
 	if err = addAuthentication(req); err != nil {
 		return nil, err
