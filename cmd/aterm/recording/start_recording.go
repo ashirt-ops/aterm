@@ -57,6 +57,7 @@ type recordingConfiguration struct {
 	dialogReader         io.ReadCloser
 	dialogWriter         io.WriteCloser
 }
+
 var recConfig recordingConfiguration
 
 func DialogReader() io.ReadCloser {

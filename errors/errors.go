@@ -1,8 +1,8 @@
 package errors
 
 import (
-	"fmt"
 	"errors"
+	"fmt"
 )
 
 // Wrap constructs a new error from the provided error with the msg text applied

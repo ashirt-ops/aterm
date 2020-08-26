@@ -199,7 +199,7 @@ func PrintLoadedConfig(w io.Writer) {
 // This is optimized for human reading, rather than as a serialization format.
 // All errors that are encountered while writing are ignored.
 func PrintConfigTo(t TermRecorderConfig, w io.Writer) {
-	PrintConfigWithHeaderTo("Current Configuration" , t, w)
+	PrintConfigWithHeaderTo("Current Configuration", t, w)
 }
 
 // PrintConfigWithHeaderTo writes the provided configuration to the provided io.Writer.
@@ -218,7 +218,6 @@ func PrintConfigWithHeaderTo(header string, t TermRecorderConfig, w io.Writer) {
 	writeLine(fmt.Sprintf("\tOperation Slug:  %v", t.OperationSlug))
 	writeLine(fmt.Sprintf("\tRecording Shell: %v", t.RecordingShell))
 }
-
 
 // TermRecorderConfigWithDefaults generates a TermRecorderConfig struct with some common default values
 func TermRecorderConfigWithDefaults() TermRecorderConfig {

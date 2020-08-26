@@ -5,7 +5,7 @@ package dialog
 
 import "io"
 
-// InvalidSelection is a predefined selection for 
+// InvalidSelection is a predefined selection representing choices that errored out.
 var InvalidSelection = SimpleOption{invalid: true}
 
 type SimpleOption struct {
