@@ -22,13 +22,3 @@ func UserQuery(question string, defaultValue *string, inputStream io.ReadCloser)
 	}
 	return p.Run()
 }
-
-// MustUserQuery is a version of UserQuery that panics if UserQuery produces an error.
-// This is typically unlikely, except during development.
-func MustUserQuery(question string, defaultValue *string, inputStream io.ReadCloser) string {
-	result, err := UserQuery(question, defaultValue, inputStream)
-	if err != nil {
-		panic(err)
-	}
-	return result
-}

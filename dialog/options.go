@@ -3,83 +3,46 @@
 
 package dialog
 
-// Option is a small struct for providing options to a Select menu
-type Option struct {
-	Label       string
-	Description string
-	Action      func() OptionActionResponse
+import "io"
+
+// InvalidSelection is a predefined selection for 
+var InvalidSelection = SimpleOption{invalid: true}
+
+type SimpleOption struct {
+	invalid bool
+	Label   string
+	Data    interface{}
 }
 
-func (o Option) String() string {
-	return o.Label
+func (s *SimpleOption) IsValid() bool {
+	return !s.invalid
 }
 
-// Equals checks if two options are equal by comparing their labels
-func (o Option) Equals(that Option) bool {
-	return o.Label == that.Label
-}
-
-// OptionSliceToStringSlice conerts the given option slice into a string slice, for presenting
-// to Select menus.
-func OptionSliceToStringSlice(options []Option) []string {
-	rtn := make([]string, len(options))
-	for i, opt := range options {
-		rtn[i] = opt.Label
+func simpleOptionSliceToStrings(opts []SimpleOption) []string {
+	rtn := make([]string, len(opts))
+	for i, v := range opts {
+		rtn[i] = v.Label
 	}
 	return rtn
 }
 
-// OptionActionResponse contains a basic level of response information when selecting from a
-// Select menu. This should help inform the parent of the select on how to proceed
-type OptionActionResponse struct {
-	// Err provides the error encountered when the option was selected, if any such error occurred.
-	Err error
+// PlainSelect constructs a question, with pre-defined answers. Users must "select" an answer.
+// This version works off of SimpleOption, and returns back the selected option and what error
+// occurred while making that selection, if any.
+func PlainSelect(label string, options []SimpleOption, inputStream io.ReadCloser) (SimpleOption, error) {
+	p := MkBasicSelect(inputStream)
+	p.Label = label
+	p.Searcher = SearcherContainsCI(simpleOptionSliceToStrings(options))
 
-	// Value represents the single return value from that option action, if any
-	Value interface{}
-
-	// ShouldExit indicates if the option thinks that the user wants to leave this menu.
-	ShouldExit bool
-}
-
-// NoAction is a shorthand OptionActionResponse that indicates that menu option handled everything
-// A loose equivalent of a 201 response -- "it worked, but nothing to show"
-func NoAction() OptionActionResponse {
-	return OptionActionResponse{}
-}
-
-// PopAction is a shorthand OptionActionResponse that indicates the user wishes to leave this menu
-// via returning to the previous menu. Analogous to `..` in unix filesystems
-func PopAction() OptionActionResponse {
-	return OptionActionResponse{ShouldExit: true}
-}
-
-// ChooseAction is a shorthand OptionActionResponse that indicates which _value_ / option the
-// user selected.
-func ChooseAction(val interface{}) func() OptionActionResponse {
-	return func() OptionActionResponse {
-		return OptionActionResponse{Value: val}
+	items := make([]string, len(options))
+	for i, o := range options {
+		items[i] = o.Label
 	}
-}
+	p.Items = items
 
-// ErroredAction is a shorthand OptionActionResponse that indicates the option action encountered
-// an error.
-func ErroredAction(err error) OptionActionResponse {
-	return OptionActionResponse{Err: err}
-}
-
-// MenuOptionGoBack provides a function that's directly interactable with Option. This communicates
-// the desire to go up a level / exit the menu
-func MenuOptionGoBack() OptionActionResponse {
-	return PopAction()
-}
-
-// MenuContains checks if the given Option slice contains the passed option
-func MenuContains(menu []Option, option Option) bool {
-	for _, item := range menu {
-		if option.Equals(item) {
-			return true
-		}
+	selectedItem, _, err := p.Run()
+	if err != nil {
+		return InvalidSelection, err
 	}
-	return false
+	return options[selectedItem], nil
 }
