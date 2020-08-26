@@ -47,16 +47,17 @@ func main() {
 		opts.ShowMenu = true
 	}
 
+	// Check CLI flags
+	if opts.PrintConfig {
+		config.PrintLoadedConfig(os.Stdout)
+		return
+	}
+
 	if err := recording.InitializeRecordings(); err != nil {
 		fmt.Println(fancy.Fatal("Got an error starting up", err))
 		return
 	}
 	defer recording.RestoreTerminal()
-
-	// Check CLI flags
-	if opts.PrintConfig {
-		config.PrintLoadedConfig(os.Stdout)
-	}
 
 	menuState := appdialogs.MenuState{
 		InstanceConfig: config.CurrentConfig(),

@@ -24,7 +24,7 @@ func ParseCLI() CLIOptions {
 	attachStringFlag("operation", "", "Operation Slug to use when saving evidence", "", &opts.OperationSlug)
 	attachStringFlag("shell", "s", "Path to the shell to use for recording", "", &opts.RecordingShell)
 	attachBoolFlag("menu", "m", "Show main menu", false, &opts.ShowMenu)
-	attachBoolFlag("print-config", "pc", "Print current configuration (post-command line arguments)", false, &opts.PrintConfig)
+	attachBoolFlag("print-config", "pc", "Print current configuration (post-command line arguments), then exits", false, &opts.PrintConfig)
 	attachBoolFlag("reset", "", "Rerun first run to set up initial values", false, &opts.ForceFirstRun)
 	attachBoolFlag("reset-hard", "", "Ignore the config file and rerun first run", false, &opts.HardReset)
 
