@@ -29,7 +29,7 @@ func (resp *QueryResponse) IsKillSignal() bool {
 }
 
 func queryWithDefault(prompt string, guessValue *string) (string, error) {
-	if guessValue != nil || *guessValue == "" {
+	if guessValue != nil && *guessValue != "" {
 		prompt += " [" + fancy.AsBlue(*guessValue) + "]"
 	}
 
