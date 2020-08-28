@@ -11,7 +11,10 @@ import (
 	"github.com/theparanoids/aterm/errors"
 )
 
-const ErrCannotConnectMsg = "Unable to connect to the server"
+var ErrCannotConnect = errors.New("Unable to connect to the server")
+var ErrConnectionUnauthorized = errors.New("Could not connect: Unauthorized")
+var ErrConnectionNotFound = errors.New("Could not connect: Not Found")
+var ErrConnectionUnknownStatus = errors.New("Could not connect: Unknown status")
 
 // GetOperations retrieves all of the operations that are exposed to backend tools (api routes)
 func GetOperations() ([]dtos.Operation, error) {
@@ -19,7 +22,7 @@ func GetOperations() ([]dtos.Operation, error) {
 
 	resp, err := makeJSONRequest("GET", apiURL+"/operations", http.NoBody)
 	if err != nil {
-		return ops, errors.Wrap(err, ErrCannotConnectMsg)
+		return ops, errors.Append(err, ErrCannotConnect)
 	}
 
 	if err = evaluateResponseStatusCode(resp.StatusCode); err != nil {
@@ -31,15 +34,11 @@ func GetOperations() ([]dtos.Operation, error) {
 	return ops, err
 }
 
-var ErrorConnectionUnauthorized = errors.New("Could not connect: Unauthorized")
-var ErrorConnectionNotFound = errors.New("Could not connect: Not Found")
-var ErrorConnectionUnknownStatus = errors.New("Could not connect: Unknown status")
-
 // TestConnection performs a basic query to the backend and interprets the results.
 // There are a few scenarios. A successful connection returns ("", nil)
 // Otherwise, the return structure is ("suggestion to fix (if any)", underlyingError)
 // the underlying error is likely (but not necessarily) one of:
-// ErrorConnectionUnknownStatus, ErrorConnectionNotFound, ErrorConnectionUnauthorized
+// ErrConnectionUnknownStatus, ErrConnectionNotFound, ErrConnectionUnauthorized
 // use errors.Is(err, target) to check these errors
 func TestConnection() (string, error) {
 	resp, err := makeJSONRequest("GET", apiURL+"/operations", http.NoBody)
@@ -50,10 +49,10 @@ func TestConnection() (string, error) {
 	if statusCode == http.StatusOK {
 		return "", nil
 	} else if statusCode == http.StatusUnauthorized {
-		return "Check API and Secret keys", ErrorConnectionUnauthorized
+		return "Check API and Secret keys", ErrConnectionUnauthorized
 	} else if statusCode == http.StatusNotFound {
-		return "Check API URL", ErrorConnectionNotFound
+		return "Check API URL", ErrConnectionNotFound
 	} else {
-		return "", fmt.Errorf("%w : Status Code: %v", ErrorConnectionUnknownStatus, statusCode)
+		return "", fmt.Errorf("%w : Status Code: %v", ErrConnectionUnknownStatus, statusCode)
 	}
 }

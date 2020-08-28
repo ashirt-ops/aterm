@@ -11,8 +11,8 @@ import (
 	"github.com/theparanoids/aterm/fancy"
 )
 
-var errorCancelled = fmt.Errorf("Cancelled")
-var errorAlreadyExists = fmt.Errorf("Already Exists")
+var ErrCancelled = fmt.Errorf("Cancelled")
+var ErrAlreadyExists = fmt.Errorf("Already Exists")
 
 // ShowInvalidConfigurationMessage renders user-messaging when a validation error occurs.
 // To actually validate the config, see config.ValidateConfig/ValidateLoadedConfig
@@ -38,19 +38,19 @@ func ShowInvalidConfigMessageNoHelp(validationErr error) bool {
 	hasAccessIssue := false
 
 	fmt.Println("I detected problems with this configuration:")
-	if errors.Is(validationErr, config.ErrorAccessKeyNotSet) {
+	if errors.Is(validationErr, config.ErrAccessKeyNotSet) {
 		fmt.Println(" * Access Key has not been set")
 		hasAccessIssue = true
 	}
-	if errors.Is(validationErr, config.ErrorSecretKeyNotSet) {
+	if errors.Is(validationErr, config.ErrSecretKeyNotSet) {
 		fmt.Println(" * Secret Key has not been set")
 		hasAccessIssue = true
 	}
-	if errors.Is(validationErr, config.ErrorSecretKeyMalformed) {
+	if errors.Is(validationErr, config.ErrSecretKeyMalformed) {
 		fmt.Println(" * Secret Key is invalid")
 		hasAccessIssue = true
 	}
-	if errors.Is(validationErr, config.ErrorAPIURLUnparsable) {
+	if errors.Is(validationErr, config.ErrAPIURLUnparsable) {
 		fmt.Println(" * API URL is invalid")
 	}
 	fmt.Println()

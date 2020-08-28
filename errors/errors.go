@@ -3,6 +3,8 @@ package errors
 import (
 	"errors"
 	"fmt"
+
+	"github.com/hashicorp/go-multierror"
 )
 
 // Wrap constructs a new error from the provided error with the msg text applied
@@ -47,4 +49,12 @@ func MultiErrorPrintFormat(errs []error) string {
 		errString += " : " + errs[i].Error()
 	}
 	return errString
+}
+
+// Append combines the provided errors into a single error. Any nil-value error will be effectively
+// dropped (since it's not an error), and if all errors are nil, then nil is returned
+func Append(e1 error, e2 ...error) error {
+	merged := multierror.Append(e1, e2...)
+	merged.ErrorFormat = MultiErrorPrintFormat
+	return merged.ErrorOrNil()
 }

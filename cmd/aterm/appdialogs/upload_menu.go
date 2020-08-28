@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/theparanoids/ashirt-server/backend/dtos"
 	"github.com/theparanoids/aterm/dialog"
+	"github.com/theparanoids/aterm/errors"
 	"github.com/theparanoids/aterm/fancy"
 	"github.com/theparanoids/aterm/network"
 )
@@ -185,6 +186,7 @@ func collectRecordingMetadata(metadata RecordingMetadata) (RecordingMetadata, bo
 	rtnMetadata := metadata
 	continueUpload := true
 	collectedErrors := multierror.Append(nil)
+	collectedErrors.ErrorFormat = errors.MultiErrorPrintFormat
 	var err error
 
 	rtnMetadata.Description, err = UserQuery("Enter a description for this recording", &metadata.Description)
@@ -227,9 +229,9 @@ func askForTags(operationSlug string, allTags []dtos.Tag, selectedTagIDs []int64
 		} else if selection == createOpt {
 			newTag, err := askForNewTag(operationSlug, allTags)
 			if err != nil {
-				if err == errorCancelled {
+				if err == ErrCancelled {
 					fmt.Println("Tag creation cancelled")
-				} else if err == errorAlreadyExists {
+				} else if err == ErrAlreadyExists {
 					toggleValue(&selectedTagIDs, newTag.ID)
 				} else {
 					fmt.Println("Unable to create tag. Error: " + err.Error())
@@ -269,12 +271,12 @@ func askForNewTag(operationSlug string, allTags []dtos.Tag) (*dtos.Tag, error) {
 
 	for _, t := range allTags {
 		if lowerName == strings.ToLower(t.Name) {
-			return &t, errorAlreadyExists
+			return &t, ErrAlreadyExists
 		}
 	}
 
 	if name == "" {
-		return nil, errorCancelled
+		return nil, ErrCancelled
 	}
 	return network.CreateTag(operationSlug, name, network.RandomTagColor())
 }

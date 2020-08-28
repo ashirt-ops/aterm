@@ -2,17 +2,16 @@ package appdialogs
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 
-	"github.com/hashicorp/go-multierror"
 	"github.com/theparanoids/ashirt-server/backend/dtos"
 	"github.com/theparanoids/aterm/cmd/aterm/config"
 	"github.com/theparanoids/aterm/fancy"
 
 	"github.com/theparanoids/aterm/dialog"
+	"github.com/theparanoids/aterm/errors"
 	"github.com/theparanoids/aterm/network"
 )
 
@@ -64,7 +63,7 @@ func FirstRun(primaryConfigFile, pathToCommonConfig string) (config.TermRecorder
 		if testErr == nil {
 			fmt.Printf("These configurations work.\n")
 			checkConnection = false
-		} else if errors.Is(testErr, network.ErrorConnectionNotFound) {
+		} else if errors.Is(testErr, network.ErrConnectionNotFound) {
 			fmt.Printf("It looks like the server is not up or the address is wrong.\n")
 			fix, err := dialog.YesNoPrompt("Do you want to try to fix this?", "", medium)
 			if fix && err == nil {
@@ -72,7 +71,7 @@ func FirstRun(primaryConfigFile, pathToCommonConfig string) (config.TermRecorder
 			} else {
 				checkConnection = false
 			}
-		} else if errors.Is(testErr, network.ErrorConnectionUnauthorized) {
+		} else if errors.Is(testErr, network.ErrConnectionUnauthorized) {
 			fmt.Printf("The server did not accept your access and secret key.\n")
 			fix, err := dialog.YesNoPrompt("Do you want to try to fix this?", "", medium)
 			if fix && err == nil {
@@ -116,7 +115,7 @@ func askForAccessKeyAndSecret(apiKeyGuess, secretKeyGuess *string) (*string, *st
 	apiKeyAnswer, err1 := queryWithDefault("Enter the Access Key", apiKeyGuess)
 	secretKeyAnswer, err2 := queryWithDefault("Enter the Secret Key", secretKeyGuess)
 
-	if err := multierror.Append(err1, err2).ErrorOrNil(); err != nil {
+	if err := errors.Append(err1, err2); err != nil {
 		fmt.Println(fancy.Caution("I had a problem collecting this info", err))
 		return strPtr(""), strPtr("")
 	}

@@ -29,7 +29,7 @@ func main() {
 	}
 
 	// Check if first run to set up configuration
-	if errors.Is(err, config.ErrorConfigFileDoesNotExist) || opts.ForceFirstRun {
+	if errors.Is(err, config.ErrConfigFileDoesNotExist) || opts.ForceFirstRun {
 		configData, _ := appdialogs.FirstRun(config.ATermConfigPath(), config.ASHIRTConfigPath())
 		config.SetConfig(config.PreviewUpdatedConfig(configData))
 		config.WriteConfig()

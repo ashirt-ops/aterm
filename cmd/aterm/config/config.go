@@ -52,10 +52,8 @@ func ParseConfigNoOverrides() (TermRecorderConfig, error) {
 
 	fileParseErr := parseConfigFile(&cfg)
 	envParseErr := cfg.parseEnv()
-	combinedErr := multierror.Append(fileParseErr, envParseErr)
-	combinedErr.ErrorFormat = errors.MultiErrorPrintFormat
 
-	return cfg, combinedErr.ErrorOrNil()
+	return cfg, errors.Append(fileParseErr, envParseErr)
 }
 
 func parseConfigFile(cfg *TermRecorderConfig) error {
@@ -63,7 +61,7 @@ func parseConfigFile(cfg *TermRecorderConfig) error {
 	defer f.Close()
 	if err != nil {
 		if os.IsNotExist(err) {
-			return ErrorConfigFileDoesNotExist
+			return ErrConfigFileDoesNotExist
 		}
 		return errors.Wrap(err, "Unable to read config file")
 	}
@@ -98,19 +96,20 @@ func ValidateLoadedConfig() error {
 // be checked via errors.Is function
 func ValidateConfig(tConfig TermRecorderConfig) error {
 	validationErr := multierror.Append(nil)
+	validationErr.ErrorFormat = errors.MultiErrorPrintFormat
 
 	if tConfig.AccessKey == "" {
-		multierror.Append(validationErr, ErrorAccessKeyNotSet)
+		multierror.Append(validationErr, ErrAccessKeyNotSet)
 	}
 
 	if tConfig.SecretKey == "" {
-		multierror.Append(validationErr, ErrorSecretKeyNotSet)
+		multierror.Append(validationErr, ErrSecretKeyNotSet)
 	} else if err := network.SetSecretKey(tConfig.SecretKey); err != nil {
-		multierror.Append(validationErr, ErrorSecretKeyMalformed)
+		multierror.Append(validationErr, ErrSecretKeyMalformed)
 	}
 
 	if _, err := url.Parse(tConfig.APIURL); err != nil {
-		multierror.Append(validationErr, ErrorAPIURLUnparsable)
+		multierror.Append(validationErr, ErrAPIURLUnparsable)
 	}
 
 	return validationErr.ErrorOrNil()
