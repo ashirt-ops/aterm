@@ -1,8 +1,6 @@
 package appdialogs
 
 import (
-	"fmt"
-
 	"github.com/theparanoids/ashirt-server/backend/dtos"
 	"github.com/theparanoids/aterm/dialog"
 	"github.com/theparanoids/aterm/fancy"
@@ -43,7 +41,7 @@ func StartMenus(initialState MenuState) {
 	internalMenuState = initialState
 	ops, err := updateOperations()
 	if err != nil {
-		fmt.Println(fancy.Caution("Unable to get operations", err))
+		println(fancy.Caution("Unable to get operations", err))
 
 		// if we've previously recorded, assume the current op is still available
 		if defaultSlug := initialState.InstanceConfig.OperationSlug; defaultSlug != "" {

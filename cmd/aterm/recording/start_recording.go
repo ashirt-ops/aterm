@@ -4,7 +4,6 @@
 package recording
 
 import (
-	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -97,8 +96,8 @@ func StartRecording(opSlug string) (RecordingOutput, error) {
 		OnRecordingStart: func(output RecordingOutput) {
 			// carrage returns here are required. otherwise, each following line will start
 			// at the last printed column of the current line.
-			fmt.Println("Recording to " + fancy.WithBold(output.FilePath) + "\n\r")
-			fmt.Println(fancy.WithBold("Recording now live!\r", fancy.Reverse|fancy.LightGreen))
+			println("Recording to " + fancy.WithBold(output.FilePath) + "\n\r")
+			println(fancy.WithBold("Recording now live!\r", fancy.Reverse|fancy.LightGreen))
 		},
 	}
 

@@ -23,11 +23,11 @@ func ShowInvalidConfigurationMessage(validationErr error) {
 
 	showAccessCorrection := ShowInvalidConfigMessageNoHelp(validationErr)
 
-	fmt.Println("These errors can be corrected by editing the configuration in the main menu, or " +
+	println("These errors can be corrected by editing the configuration in the main menu, or " +
 		"by editing the configuration file directly at " + fancy.WithBold(config.ATermConfigPath()) + ".")
 
 	if showAccessCorrection {
-		fmt.Println("If you have lost your access key pair, you can generate a new pair from the ASHIRT servers.")
+		println("If you have lost your access key pair, you can generate a new pair from the ASHIRT servers.")
 	}
 }
 
@@ -37,23 +37,23 @@ func ShowInvalidConfigMessageNoHelp(validationErr error) bool {
 	}
 	hasAccessIssue := false
 
-	fmt.Println("I detected problems with this configuration:")
+	println("I detected problems with this configuration:")
 	if errors.Is(validationErr, config.ErrAccessKeyNotSet) {
-		fmt.Println(" * Access Key has not been set")
+		println(" * Access Key has not been set")
 		hasAccessIssue = true
 	}
 	if errors.Is(validationErr, config.ErrSecretKeyNotSet) {
-		fmt.Println(" * Secret Key has not been set")
+		println(" * Secret Key has not been set")
 		hasAccessIssue = true
 	}
 	if errors.Is(validationErr, config.ErrSecretKeyMalformed) {
-		fmt.Println(" * Secret Key is invalid")
+		println(" * Secret Key is invalid")
 		hasAccessIssue = true
 	}
 	if errors.Is(validationErr, config.ErrAPIURLUnparsable) {
-		fmt.Println(" * API URL is invalid")
+		println(" * API URL is invalid")
 	}
-	fmt.Println()
+	println()
 
 	return hasAccessIssue
 }
@@ -62,7 +62,7 @@ func ShowInvalidConfigMessageNoHelp(validationErr error) bool {
 // parsing. It is assumed that these errors are NOT file-does-not-exist errors, as this should
 // indicate a first run
 func ShowConfigurationParsingErrorMessage(err error) {
-	fmt.Println("I had a problem parsing the configuration file:")
-	fmt.Println(" " + fancy.WithPizzazz(err.Error(), fancy.Red))
-	fmt.Println("Execution will continue, but some features may not work until the above issue is fixed")
+	println("I had a problem parsing the configuration file:")
+	println(" " + fancy.WithPizzazz(err.Error(), fancy.Red))
+	println("Execution will continue, but some features may not work until the above issue is fixed")
 }

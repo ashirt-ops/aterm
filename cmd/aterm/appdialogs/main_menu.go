@@ -1,7 +1,6 @@
 package appdialogs
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/theparanoids/ashirt-server/backend/dtos"
@@ -36,7 +35,7 @@ func renderMainMenu(state MenuState) MenuState {
 	case dialogOptionUpdateOps == selection:
 		newOps, err := updateOperations()
 		if err != nil {
-			fmt.Println(fancy.Caution("Unable to retrieve operations list", err))
+			println(fancy.Caution("Unable to retrieve operations list", err))
 		} else {
 			rtnState.AvailableOperations = newOps
 		}
@@ -46,9 +45,9 @@ func renderMainMenu(state MenuState) MenuState {
 		rtnState.InstanceConfig = newConfig
 
 	case err != nil:
-		fmt.Println(fancy.Caution("I got an error handling that respone", err))
+		println(fancy.Caution("I got an error handling that respone", err))
 	default:
-		fmt.Println("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
+		println("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
 	}
 
 	return rtnState
@@ -59,7 +58,7 @@ func startNewRecording(state MenuState) MenuState {
 
 	// collect info
 	if len(state.AvailableOperations) == 0 {
-		fmt.Println("Unable to record: No operations available (Try refreshing operations)")
+		println("Unable to record: No operations available (Try refreshing operations)")
 		rtnState.CurrentView = MenuViewMainMenu
 		return rtnState
 	}
@@ -85,7 +84,7 @@ func startNewRecording(state MenuState) MenuState {
 	output, err := recording.StartRecording(rtnState.RecordedMetadata.OperationSlug)
 
 	if err != nil {
-		fmt.Println(fancy.Fatal("Unable to record", err))
+		println(fancy.Fatal("Unable to record", err))
 		rtnState.CurrentView = MenuViewMainMenu
 		return rtnState
 	}
@@ -104,13 +103,13 @@ func testConnection() {
 		}),
 	)
 	if testErr != nil {
-		fmt.Println(fancy.RedCross() + " Could not connect: " + fancy.WithBold(testErr.Error(), fancy.Red))
+		println(fancy.RedCross() + " Could not connect: " + fancy.WithBold(testErr.Error(), fancy.Red))
 		if value != "" {
-			fmt.Println("Recommendation: " + value)
+			println("Recommendation: " + value)
 		}
 		return
 	}
-	fmt.Println(fancy.GreenCheck() + " Connected")
+	println(fancy.GreenCheck() + " Connected")
 }
 
 func updateOperations() ([]dtos.Operation, error) {
@@ -126,7 +125,7 @@ func updateOperations() ([]dtos.Operation, error) {
 		return []dtos.Operation{}, loadingErr
 	}
 
-	fmt.Printf("Updated operations (%v total)\n", len(ops))
+	printf("Updated operations (%v total)\n", len(ops))
 	return ops, nil
 }
 
@@ -134,10 +133,12 @@ func editConfig(runningConfig config.TermRecorderConfig) config.TermRecorderConf
 	rtnConfig := runningConfig
 	overrideCfg := config.CloneConfigAsOverrides(runningConfig)
 
-	overrideCfg.AccessKey, overrideCfg.SecretKey = askForAccessKeyAndSecret(overrideCfg.AccessKey, overrideCfg.SecretKey)
-	overrideCfg.APIURL = askForAPIURL(overrideCfg.APIURL)
-	overrideCfg.RecordingShell = askForShell(overrideCfg.RecordingShell)
-	overrideCfg.OutputDir = askForSavePath(overrideCfg.OutputDir)
+	overrideCfg.AccessKey = askFor(accessKeyFields, overrideCfg.AccessKey).Value
+	overrideCfg.SecretKey = askFor(secretKeyFields, overrideCfg.SecretKey).Value
+	overrideCfg.APIURL = askFor(apiURLFields, overrideCfg.APIURL).Value
+
+	overrideCfg.RecordingShell = askFor(shellFields, thisOrThat(overrideCfg.RecordingShell, os.Getenv("SHELL"))).Value
+	overrideCfg.OutputDir = askFor(savePathFields, overrideCfg.OutputDir).Value
 	overrideCfg.OperationSlug = askForOperationSlug(internalMenuState.AvailableOperations, runningConfig.OperationSlug)
 
 	newCfg := config.PreviewUpdatedInstanceConfig(runningConfig, overrideCfg)
@@ -173,33 +174,10 @@ func editConfig(runningConfig config.TermRecorderConfig) config.TermRecorderConf
 		break
 
 	case err != nil:
-		fmt.Println(fancy.Caution("I got an error handling that respone", err))
+		println(fancy.Caution("I got an error handling that respone", err))
 	default:
-		fmt.Println("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
+		println("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
 	}
 
 	return rtnConfig
-}
-
-func operationsToOptions(ops []dtos.Operation, primarySlug string) []dialog.SimpleOption {
-	operationOptions := make([]dialog.SimpleOption, len(ops))
-	firstIndex := -1
-	for i, op := range ops {
-		suffix := ""
-		if op.Slug == primarySlug {
-			suffix = " (Current)"
-			firstIndex = i
-		}
-
-		operationOptions[i] = dialog.SimpleOption{Label: op.Name + suffix, Data: op}
-	}
-
-	if firstIndex == -1 {
-		return operationOptions
-	}
-	reordered := []dialog.SimpleOption{operationOptions[firstIndex]}
-	reordered = append(reordered, operationOptions[0:firstIndex]...)
-	reordered = append(reordered, operationOptions[firstIndex+1:len(operationOptions)]...)
-
-	return reordered
 }

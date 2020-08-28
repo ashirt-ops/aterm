@@ -11,6 +11,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/theparanoids/aterm/errors"
+	"github.com/theparanoids/aterm/fancy"
 	"github.com/theparanoids/aterm/network"
 	"gopkg.in/yaml.v2"
 
@@ -205,8 +206,9 @@ func PrintConfigTo(t TermRecorderConfig, w io.Writer) {
 // This is optimized for human reading, rather than as a serialization format.
 // All errors that are encountered while writing are ignored.
 func PrintConfigWithHeaderTo(header string, t TermRecorderConfig, w io.Writer) {
-	writeLine := func(s string) { w.Write([]byte(s + "\n")) }
+	writeLine := func(s string) { w.Write([]byte(s + "\n\r")) }
 
+	writeLine("\r" + fancy.Clear)
 	writeLine(header + ":")
 	writeLine(fmt.Sprintf("\tConfig Version:  %v", t.ConfigVersion))
 	writeLine(fmt.Sprintf("\tAPI Host:        %v", t.APIURL))
