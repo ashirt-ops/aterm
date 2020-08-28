@@ -58,7 +58,7 @@ func startNewRecording(state MenuState) MenuState {
 
 	// collect info
 	if len(state.AvailableOperations) == 0 {
-		println("Unable to record: No operations available (Try refreshing operations)")
+		println(fancy.Clear + "\rUnable to record: No operations available (Try refreshing operations)")
 		rtnState.CurrentView = MenuViewMainMenu
 		return rtnState
 	}
