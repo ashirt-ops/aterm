@@ -18,8 +18,8 @@ import (
 	"github.com/theparanoids/aterm/network"
 )
 
-var errorCancelled = fmt.Errorf("Cancelled")
-var errorAlreadyExists = fmt.Errorf("Already Exists")
+var ErrCancelled = fmt.Errorf("Cancelled")
+var ErrAlreadyExists = fmt.Errorf("Already Exists")
 
 var operationOptions = []dialog.Option{}
 
@@ -199,9 +199,9 @@ func askForTags(operationSlug string, allTags []dtos.Tag, selectedTagIDs []int64
 		} else if choice == createVal {
 			newTag, err := askForNewTag(operationSlug, allTags)
 			if err != nil {
-				if err == errorCancelled {
+				if err == ErrCancelled {
 					fmt.Println("Tag creation cancelled")
-				} else if err == errorAlreadyExists {
+				} else if err == ErrAlreadyExists {
 					toggleValue(&selectedTagIDs, newTag.ID)
 				} else {
 					fmt.Println("Unable to create tag. Error: " + err.Error())
@@ -236,12 +236,12 @@ func askForNewTag(operationSlug string, allTags []dtos.Tag) (*dtos.Tag, error) {
 
 	for _, t := range allTags {
 		if lowerName == strings.ToLower(t.Name) {
-			return &t, errorAlreadyExists
+			return &t, ErrAlreadyExists
 		}
 	}
 
 	if name == "" {
-		return nil, errorCancelled
+		return nil, ErrCancelled
 	}
 	return network.CreateTag(operationSlug, name, network.RandomTagColor())
 }
