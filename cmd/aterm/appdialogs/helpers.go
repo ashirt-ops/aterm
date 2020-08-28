@@ -76,5 +76,5 @@ func strPtr(s string) *string {
 }
 
 // defaultRecordingHome represents the path to what a first time user would be suggested as a location
-// to store recordings. 
+// to store recordings.
 var defaultRecordingHome = filepath.Join(xdg.DataHome(), "aterm", "recordings")
