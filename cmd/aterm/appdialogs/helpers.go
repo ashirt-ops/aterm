@@ -2,7 +2,9 @@ package appdialogs
 
 import (
 	"errors"
+	"path/filepath"
 
+	"github.com/OpenPeeDeeP/xdg"
 	"github.com/manifoldco/promptui"
 	"github.com/theparanoids/aterm/fancy"
 )
@@ -72,3 +74,7 @@ func thisOrThat(this *string, that string) *string {
 func strPtr(s string) *string {
 	return &s
 }
+
+// defaultRecordingHome represents the path to what a first time user would be suggested as a location
+// to store recordings. 
+var defaultRecordingHome = filepath.Join(xdg.DataHome(), "aterm", "recordings")

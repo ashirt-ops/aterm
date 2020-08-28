@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/adrg/xdg"
+	"github.com/OpenPeeDeeP/xdg"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/theparanoids/aterm/errors"
 	"github.com/theparanoids/aterm/fancy"
@@ -19,7 +19,7 @@ import (
 )
 
 func configHome() string {
-	return filepath.Join(xdg.ConfigHome, "ashirt")
+	return filepath.Join(xdg.ConfigHome(), "ashirt")
 }
 
 // ASHIRTConfigPath points to the configuration file used by the ASHIRT application
@@ -129,7 +129,7 @@ type TermRecorderConfig struct {
 
 type TermRecorderConfigOverrides struct {
 	APIURL         *string `json:"apiURL"`
-	OutputDir      *string `json:"outputDir"`
+	OutputDir      *string `json:"evidenceRepo"`
 	AccessKey      *string `json:"accessKey"`
 	SecretKey      *string `json:"secretKey"`
 	OutputFileName *string

@@ -60,8 +60,9 @@ var savePathFields = AskForTemplateFields{
 	WithPreamble: true,
 	Preamble:     "Where shall I save the recordings? This can be anywhere on your computer but typically resides within the home directory.",
 	Examples: []NamedExample{
-		NamedExample{Name: "Mac", Text: "/Users/jsmith/ashirt"},
-		NamedExample{Name: "Linux", Text: "/home/jsmith/ashirt"},
+		NamedExample{Name: "Mac", Text: "/Users/jsmith/ashirt/recordings"},
+		NamedExample{Name: "Linux", Text: "/home/jsmith/ashirt/recordings"},
+		NamedExample{Name: "System Recommendation", Text: defaultRecordingHome},
 	},
 	Prompt: "Enter the save path",
 }

@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 
-	"github.com/adrg/xdg"
-
 	"github.com/manifoldco/promptui"
 	"github.com/theparanoids/ashirt-server/backend/dtos"
 	"github.com/theparanoids/aterm/cmd/aterm/config"
@@ -46,7 +44,7 @@ func FirstRun(primaryConfigFile, pathToCommonConfig string) (config.TermRecorder
 	configData.AccessKey = askFor(accessKeyFields, configData.AccessKey).Value
 	configData.SecretKey = askFor(secretKeyFields, configData.SecretKey).Value
 
-	configData.OutputDir = askFor(savePathFields, thisOrThat(configData.OutputDir, xdg.DataHome)).Value
+	configData.OutputDir = askFor(savePathFields, thisOrThat(configData.OutputDir, defaultRecordingHome)).Value
 
 	checkConnection := true
 

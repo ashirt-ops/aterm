@@ -3,7 +3,7 @@ module github.com/theparanoids/aterm
 go 1.14
 
 require (
-	github.com/adrg/xdg v0.2.1
+	github.com/OpenPeeDeeP/xdg v1.0.0
 	github.com/creack/pty v1.1.11
 	github.com/hashicorp/go-multierror v1.1.0
 	github.com/jonboulle/clockwork v0.1.0

@@ -49,6 +49,9 @@ run:
 run-menu:
 	go run cmd/aterm/*.go -menu
 
+.PHONY: run-reset-hard
+run-reset-hard:
+	go run cmd/aterm/*.go -reset-hard
 
 .PHONY: debug
 debug:
