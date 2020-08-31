@@ -23,6 +23,8 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
+var ErrNotInitialized = errors.New("Recordings have not been initialized")
+
 // RecordingInput is a small structure for holding all configuration details for starting up
 // a recording.
 //
@@ -49,6 +51,7 @@ type RecordingOutput struct {
 
 type recordingConfiguration struct {
 	writeTarget  int
+	isCopying    bool
 	ptyReader    io.ReadCloser
 	ptyWriter    io.WriteCloser
 	dialogReader io.ReadCloser
@@ -61,26 +64,15 @@ func DialogReader() io.ReadCloser {
 	return recConfig.dialogReader
 }
 
-func InitializeRecordings() error {
+func InitializeRecordings() {
 	recConfig.ptyReader, recConfig.ptyWriter = io.Pipe()
 	recConfig.dialogReader, recConfig.dialogWriter = io.Pipe()
-
-	return nil
 }
-
-var ErrNotInitialized = errors.New("Recordings have not been initialized")
-var copyStarted = false
 
 // StartRecording takes control of the terminal and starts a subshell to record input.
 func StartRecording(opSlug string) (RecordingOutput, error) {
-	// switch to raw input, to stream to pty
 	if recConfig.ptyReader == nil {
 		return RecordingOutput{}, ErrNotInitialized
-	}
-
-	termState, err := terminal.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		return RecordingOutput{}, err
 	}
 
 	recOpts := RecordingInput{
@@ -100,18 +92,26 @@ func StartRecording(opSlug string) (RecordingOutput, error) {
 		systemstate.UpdateTermWidth(size.Cols)
 	}
 
-	if !copyStarted {
+	if !recConfig.isCopying {
 		go func() {
 			copyRouter([]io.Writer{recConfig.ptyWriter, recConfig.dialogWriter}, os.Stdin, &recConfig.writeTarget)
 		}()
-		copyStarted = true
+		recConfig.isCopying = true
 	}
+
 	recConfig.writeTarget = 0
-	output, err := record(recOpts)
-	terminal.Restore(int(os.Stdin.Fd()), termState)
-	recConfig.writeTarget = 1
-	recConfig.ptyWriter.Write([]byte("a")) // feed a dummy character to force the write target to switch over to the dialog writer
-	return output, err
+	// switch to raw input, to stream to pty
+	termState, err := terminal.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		return RecordingOutput{}, err
+	}
+	defer func() {
+		terminal.Restore(int(os.Stdin.Fd()), termState)
+		recConfig.writeTarget = 1
+		recConfig.ptyWriter.Write([]byte("a")) // feed a dummy character to force the write target to switch over to the dialog writer
+	}()
+
+	return record(recOpts)
 }
 
 // copyRouter is based off of io.Copy (and by extension, copyBuffer. This simplifies the implementation
