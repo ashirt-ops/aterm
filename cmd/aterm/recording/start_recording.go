@@ -89,8 +89,7 @@ func StartRecording(opSlug string) (RecordingOutput, error) {
 		Shell:     config.RecordingShell(),
 		TermInput: recConfig.ptyReader,
 		OnRecordingStart: func(output RecordingOutput) {
-			// carrage returns here are required. otherwise, each following line will start
-			// at the last printed column of the current line.
+			// These println occur while the terminal is in a raw state. CRs need to be manually added.
 			println("Recording to " + fancy.WithBold(output.FilePath) + "\n\r")
 			println(fancy.WithBold("Recording now live!\r", fancy.Reverse|fancy.LightGreen))
 		},
