@@ -17,7 +17,6 @@ import (
 	"github.com/theparanoids/aterm/eventers"
 	"github.com/theparanoids/aterm/fancy"
 	"github.com/theparanoids/aterm/formatters"
-	"github.com/theparanoids/aterm/isthere"
 	"github.com/theparanoids/aterm/recorders"
 	"github.com/theparanoids/aterm/systemstate"
 	"github.com/theparanoids/aterm/write"
@@ -101,7 +100,7 @@ func StartRecording(opSlug string) (RecordingOutput, error) {
 		},
 	}
 
-	if size, err := pty.GetsizeFull(os.Stdin); isthere.No(err) {
+	if size, err := pty.GetsizeFull(os.Stdin); err == nil {
 		systemstate.UpdateTermHeight(size.Rows)
 		systemstate.UpdateTermWidth(size.Cols)
 	}
