@@ -41,7 +41,7 @@ func StartMenus(initialState MenuState) {
 	internalMenuState = initialState
 	ops, err := updateOperations()
 	if err != nil {
-		println(fancy.Caution("Unable to get operations", err))
+		printline(fancy.Caution("Unable to get operations", err))
 
 		// if we've previously recorded, assume the current op is still available
 		if defaultSlug := initialState.InstanceConfig.OperationSlug; defaultSlug != "" {

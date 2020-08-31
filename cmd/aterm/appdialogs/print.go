@@ -8,7 +8,8 @@ import (
 
 var medium = os.Stdout
 
-func println(s ...string) {
+// printline avoid using println, but does the same as fmt.Println
+func printline(s ...string) {
 	fmt.Println(strings.Join(s, " ") + "\r")
 }
 

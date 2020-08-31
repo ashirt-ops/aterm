@@ -62,9 +62,9 @@ func renderUploadMenu(state MenuState) MenuState {
 		rtnState.RecordedMetadata = newMetadata
 
 	case err != nil:
-		println("I got an error handling that respone: " + fancy.WithBold(err.Error()))
+		printfln("I got an error handling that respone: %v", fancy.WithBold(err.Error()))
 	default:
-		println("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
+		printline("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
 	}
 
 	return rtnState
@@ -87,7 +87,7 @@ func renameRecording(metadata RecordingMetadata) RecordingMetadata {
 	filename, err := queryWithDefault("Enter a new filename", &originalName)
 
 	if err != nil {
-		println(fancy.Fatal("Unable to move file", err))
+		printline(fancy.Fatal("Unable to move file", err))
 	} else if filename != originalName {
 		if !strings.HasSuffix(filename, ".cast") {
 			filename += ".cast"
@@ -95,9 +95,9 @@ func renameRecording(metadata RecordingMetadata) RecordingMetadata {
 		newPath := filepath.Join(dir, filename)
 		err = os.Rename(metadata.FilePath, newPath)
 		if err != nil {
-			println(fancy.Fatal("Unable to move file", err))
+			printline(fancy.Fatal("Unable to move file", err))
 		} else {
-			println("Moved recording to:" + fancy.WithBold(newPath))
+			printfln("Moved recording to: %v", fancy.WithBold(newPath))
 			rtnMetadata.FilePath = newPath
 		}
 	}
@@ -116,16 +116,16 @@ func discardRecording(metadata RecordingMetadata) RecordingMetadata {
 	case yes == selection:
 		err := os.Remove(metadata.FilePath)
 		if err != nil {
-			println("Unable to delete recording at: " + fancy.WithBold(metadata.FilePath))
-			println(fancy.Fatal("Error", err))
+			printfln("Unable to delete recording at: %v", fancy.WithBold(metadata.FilePath))
+			printline(fancy.Fatal("Error", err))
 		}
 		rtnMetadata = RecordingMetadata{}
 	case no == selection:
 		break
 	case err != nil:
-		println(fancy.Caution("I got an error handling that respone", err))
+		printline(fancy.Caution("I got an error handling that respone", err))
 	default:
-		println("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
+		printline("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
 	}
 	return rtnMetadata
 }
@@ -140,10 +140,10 @@ func validateRecording(metadata RecordingMetadata) (bool, []byte) {
 	)
 
 	if err != nil {
-		println(fancy.Fatal("Couldn't validate file", err))
+		printline(fancy.Fatal("Couldn't validate file", err))
 		return false, data
 	}
-	println(fancy.GreenCheck() + " File Validated")
+	printfln("%v File Validated", fancy.GreenCheck())
 	return true, data
 }
 
@@ -153,7 +153,7 @@ func uploadRecording(metadata RecordingMetadata, content []byte) RecordingMetada
 
 	doContinue, err := dialog.YesNoPrompt("Do you want to continue?", "", internalMenuState.DialogInput)
 	if err != nil {
-		println("I got an error handling that respone: " + fancy.WithBold(err.Error()))
+		printfln("I got an error handling that respone: %v", fancy.WithBold(err.Error()))
 		return rtnMetadata
 	}
 	if doContinue {
@@ -171,9 +171,9 @@ func uploadRecording(metadata RecordingMetadata, content []byte) RecordingMetada
 			}),
 		)
 		if err != nil {
-			println(fancy.Caution("Unable to upload recording", err))
+			printline(fancy.Caution("Unable to upload recording", err))
 		} else {
-			println(fancy.GreenCheck() + " File uploaded")
+			printfln("%v File uploaded", fancy.GreenCheck())
 			rtnMetadata.Uploaded = true
 		}
 	}
@@ -199,15 +199,15 @@ func collectRecordingMetadata(metadata RecordingMetadata) (RecordingMetadata, bo
 		}),
 	)
 	if err != nil {
-		println(fancy.Caution("Unable to get tags", err))
+		printline(fancy.Caution("Unable to get tags", err))
 	} else {
 		rtnMetadata.SelectedTags = askForTags(metadata.OperationSlug, serverTags, tagsToIDs(metadata.SelectedTags))
 	}
 	collectedErrors = multierror.Append(collectedErrors, err)
 
 	if err := collectedErrors.ErrorOrNil(); err != nil {
-		println(fancy.Caution("I had an issue collecting metadata", err))
-		println("I will salvage what I can, and you can retry.")
+		printline(fancy.Caution("I had an issue collecting metadata", err))
+		printline("I will salvage what I can, and you can retry.")
 		continueUpload = false
 	}
 
@@ -230,11 +230,11 @@ func askForTags(operationSlug string, allTags []dtos.Tag, selectedTagIDs []int64
 			newTag, err := askForNewTag(operationSlug, allTags)
 			if err != nil {
 				if err == ErrCancelled {
-					println("Tag creation cancelled")
+					printline("Tag creation cancelled")
 				} else if err == ErrAlreadyExists {
 					toggleValue(&selectedTagIDs, newTag.ID)
 				} else {
-					println("Unable to create tag. Error: " + err.Error())
+					printfln("Unable to create tag. Error: %v", err.Error())
 				}
 			} else {
 				allTags = append(allTags, *newTag)
@@ -245,7 +245,7 @@ func askForTags(operationSlug string, allTags []dtos.Tag, selectedTagIDs []int64
 			if ok {
 				toggleValue(&selectedTagIDs, val)
 			} else {
-				println(fancy.Caution("That selection doesn't seem to be valid. This should be reported", nil))
+				printline(fancy.Caution("That selection doesn't seem to be valid. This should be reported", nil))
 			}
 		}
 	}
@@ -314,7 +314,7 @@ func askForSingleTag(allTags []dtos.Tag, selectedTagIDs []int64, alwaysOptions [
 	msg := fmt.Sprintf("Choose your tags (Currently: %v)", fancy.WithBold(strings.Join(selectedTagNames, ", "), 0))
 	selection, err := PlainSelect(msg, allTagOptions)
 	if err != nil {
-		println(fancy.Caution("I had a problem making that selection", err))
+		printline(fancy.Caution("I had a problem making that selection", err))
 		return dialog.InvalidSelection
 	}
 	return selection

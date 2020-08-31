@@ -37,10 +37,10 @@ func FirstRun(primaryConfigFile, pathToCommonConfig string) (config.TermRecorder
 		}
 	}
 
-	println("If the value in [brackets] looks good, simply press enter to accept that value.")
+	printline("If the value in [brackets] looks good, simply press enter to accept that value.")
 	configData.APIURL = askFor(apiURLFields, configData.APIURL).Value
 
-	println("I need to know your credentials to talk to the ASHIRT servers. You can generate a new key from your account settings on the ASHIRT website.")
+	printline("I need to know your credentials to talk to the ASHIRT servers. You can generate a new key from your account settings on the ASHIRT website.")
 	configData.AccessKey = askFor(accessKeyFields, configData.AccessKey).Value
 	configData.SecretKey = askFor(secretKeyFields, configData.SecretKey).Value
 
@@ -101,7 +101,7 @@ func askForOperationSlug(availableOps []dtos.Operation, currentOperationSlug str
 	selectedOpOption, err := PlainSelect("Select an Operation", operationsToOptions(availableOps, currentOperationSlug))
 
 	if errors.Is(err, promptui.ErrInterrupt) {
-		println(fancy.Caution("I had a problem getting the selected operation. Using the default instead.", err))
+		printline(fancy.Caution("I had a problem getting the selected operation. Using the default instead.", err))
 		return &currentOperationSlug
 	}
 	selectedOp := selectedOpOption.Data.(dtos.Operation) // ignoring type check here -- it should never fail

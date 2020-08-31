@@ -4,6 +4,7 @@
 package recording
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -81,9 +82,9 @@ func StartRecording(opSlug string) (RecordingOutput, error) {
 		Shell:     config.RecordingShell(),
 		TermInput: recConfig.ptyReader,
 		OnRecordingStart: func(output RecordingOutput) {
-			// These println occur while the terminal is in a raw state. CRs need to be manually added.
-			println("Recording to " + fancy.WithBold(output.FilePath) + "\n\r")
-			println(fancy.WithBold("Recording now live!\r", fancy.Reverse|fancy.LightGreen))
+			// These Println occur while the terminal is in a raw state. CRs need to be manually added.
+			fmt.Println("Recording to " + fancy.WithBold(output.FilePath) + "\n\r")
+			fmt.Println(fancy.WithBold("Recording now live!\r", fancy.Reverse|fancy.LightGreen))
 		},
 	}
 

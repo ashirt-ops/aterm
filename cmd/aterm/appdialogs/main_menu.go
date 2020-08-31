@@ -35,7 +35,7 @@ func renderMainMenu(state MenuState) MenuState {
 	case dialogOptionUpdateOps == selection:
 		newOps, err := updateOperations()
 		if err != nil {
-			println(fancy.Caution("Unable to retrieve operations list", err))
+			printline(fancy.Caution("Unable to retrieve operations list", err))
 		} else {
 			rtnState.AvailableOperations = newOps
 		}
@@ -45,9 +45,9 @@ func renderMainMenu(state MenuState) MenuState {
 		rtnState.InstanceConfig = newConfig
 
 	case err != nil:
-		println(fancy.Caution("I got an error handling that respone", err))
+		printline(fancy.Caution("I got an error handling that respone", err))
 	default:
-		println("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
+		printline("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
 	}
 
 	return rtnState
@@ -58,7 +58,7 @@ func startNewRecording(state MenuState) MenuState {
 
 	// collect info
 	if len(state.AvailableOperations) == 0 {
-		println(fancy.Clear + "\rUnable to record: No operations available (Try refreshing operations)")
+		printline(fancy.ClearLine("Unable to record: No operations available (Try refreshing operations)"))
 		rtnState.CurrentView = MenuViewMainMenu
 		return rtnState
 	}
@@ -84,7 +84,7 @@ func startNewRecording(state MenuState) MenuState {
 	output, err := recording.StartRecording(rtnState.RecordedMetadata.OperationSlug)
 
 	if err != nil {
-		println(fancy.Fatal("Unable to record", err))
+		printline(fancy.Fatal("Unable to record", err))
 		rtnState.CurrentView = MenuViewMainMenu
 		return rtnState
 	}
@@ -103,13 +103,13 @@ func testConnection() {
 		}),
 	)
 	if testErr != nil {
-		println(fancy.RedCross() + " Could not connect: " + fancy.WithBold(testErr.Error(), fancy.Red))
+		printfln("%v Could not connect: %v", fancy.RedCross(), fancy.WithBold(testErr.Error(), fancy.Red))
 		if value != "" {
-			println("Recommendation: " + value)
+			printline("Recommendation: " + value)
 		}
 		return
 	}
-	println(fancy.GreenCheck() + " Connected")
+	printfln("%v Connected", fancy.GreenCheck())
 }
 
 func updateOperations() ([]dtos.Operation, error) {
@@ -174,9 +174,9 @@ func editConfig(runningConfig config.TermRecorderConfig) config.TermRecorderConf
 		break
 
 	case err != nil:
-		println(fancy.Caution("I got an error handling that respone", err))
+		printline(fancy.Caution("I got an error handling that respone", err))
 	default:
-		println("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
+		printline("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
 	}
 
 	return rtnConfig

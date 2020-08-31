@@ -23,11 +23,11 @@ func ShowInvalidConfigurationMessage(validationErr error) {
 
 	showAccessCorrection := ShowInvalidConfigMessageNoHelp(validationErr)
 
-	println("These errors can be corrected by editing the configuration in the main menu, or " +
-		"by editing the configuration file directly at " + fancy.WithBold(config.ATermConfigPath()) + ".")
+	printfln("These errors can be corrected by editing the configuration in the main menu, or "+
+		"by editing the configuration file directly at %v.", fancy.WithBold(config.ATermConfigPath()))
 
 	if showAccessCorrection {
-		println("If you have lost your access key pair, you can generate a new pair from the ASHIRT servers.")
+		printline("If you have lost your access key pair, you can generate a new pair from the ASHIRT servers.")
 	}
 }
 
@@ -37,23 +37,23 @@ func ShowInvalidConfigMessageNoHelp(validationErr error) bool {
 	}
 	hasAccessIssue := false
 
-	println("I detected problems with this configuration:")
+	printline("I detected problems with this configuration:")
 	if errors.Is(validationErr, config.ErrAccessKeyNotSet) {
-		println(" * Access Key has not been set")
+		printline(" * Access Key has not been set")
 		hasAccessIssue = true
 	}
 	if errors.Is(validationErr, config.ErrSecretKeyNotSet) {
-		println(" * Secret Key has not been set")
+		printline(" * Secret Key has not been set")
 		hasAccessIssue = true
 	}
 	if errors.Is(validationErr, config.ErrSecretKeyMalformed) {
-		println(" * Secret Key is invalid")
+		printline(" * Secret Key is invalid")
 		hasAccessIssue = true
 	}
 	if errors.Is(validationErr, config.ErrAPIURLUnparsable) {
-		println(" * API URL is invalid")
+		printline(" * API URL is invalid")
 	}
-	println()
+	printline()
 
 	return hasAccessIssue
 }
@@ -62,7 +62,7 @@ func ShowInvalidConfigMessageNoHelp(validationErr error) bool {
 // parsing. It is assumed that these errors are NOT file-does-not-exist errors, as this should
 // indicate a first run
 func ShowConfigurationParsingErrorMessage(err error) {
-	println("I had a problem parsing the configuration file:")
-	println(" " + fancy.WithPizzazz(err.Error(), fancy.Red))
-	println("Execution will continue, but some features may not work until the above issue is fixed")
+	printline("I had a problem parsing the configuration file:")
+	printline(" " + fancy.WithPizzazz(err.Error(), fancy.Red))
+	printline("Execution will continue, but some features may not work until the above issue is fixed")
 }
