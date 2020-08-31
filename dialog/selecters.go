@@ -21,8 +21,9 @@ func MkBasicSelect(inputStream io.ReadCloser) promptui.Select {
 }
 
 // From: https://github.com/manifoldco/promptui/issues/49#issuecomment-573814976
+// Modifications: Printing to Stdout rather than stderr
 // bellSkipper implements an io.WriteCloser that skips the terminal bell
-// character (ASCII code 7), and writes the rest to os.Stderr. It is used to
+// character (ASCII code 7), and writes the rest to os.Stdout. It is used to
 // replace readline.Stdout, that is the package used by promptui to display the
 // prompts.
 //
@@ -30,17 +31,17 @@ func MkBasicSelect(inputStream io.ReadCloser) promptui.Select {
 // https://github.com/manifoldco/promptui/issues/49.
 type bellSkipper struct{}
 
-// Write implements an io.WriterCloser over os.Stderr, but it skips the terminal
+// Write implements an io.WriterCloser over os.Stdout, but it skips the terminal
 // bell character.
 func (bs *bellSkipper) Write(b []byte) (int, error) {
 	const charBell = 7 // c.f. readline.CharBell
 	if len(b) == 1 && b[0] == charBell {
 		return 0, nil
 	}
-	return os.Stderr.Write(b)
+	return os.Stdout.Write(b)
 }
 
-// Close implements an io.WriterCloser over os.Stderr.
+// Close implements an io.WriterCloser over os.Stdout.
 func (bs *bellSkipper) Close() error {
-	return os.Stderr.Close()
+	return os.Stdout.Close()
 }
