@@ -48,12 +48,11 @@ type RecordingOutput struct {
 }
 
 type recordingConfiguration struct {
-	initialTerminalState *terminal.State
-	writeTarget          int
-	ptyReader            io.ReadCloser
-	ptyWriter            io.WriteCloser
-	dialogReader         io.ReadCloser
-	dialogWriter         io.WriteCloser
+	writeTarget  int
+	ptyReader    io.ReadCloser
+	ptyWriter    io.WriteCloser
+	dialogReader io.ReadCloser
+	dialogWriter io.WriteCloser
 }
 
 var recConfig recordingConfiguration
@@ -62,16 +61,7 @@ func DialogReader() io.ReadCloser {
 	return recConfig.dialogReader
 }
 
-func RestoreTerminal() error {
-	return terminal.Restore(int(os.Stdin.Fd()), recConfig.initialTerminalState)
-}
-
 func InitializeRecordings() error {
-	state, err := terminal.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		return err
-	}
-	recConfig.initialTerminalState = state
 	recConfig.ptyReader, recConfig.ptyWriter = io.Pipe()
 	recConfig.dialogReader, recConfig.dialogWriter = io.Pipe()
 
@@ -79,12 +69,18 @@ func InitializeRecordings() error {
 }
 
 var ErrNotInitialized = errors.New("Recordings have not been initialized")
+var copyStarted = false
 
 // StartRecording takes control of the terminal and starts a subshell to record input.
 func StartRecording(opSlug string) (RecordingOutput, error) {
 	// switch to raw input, to stream to pty
-	if recConfig.initialTerminalState == nil {
+	if recConfig.ptyReader == nil {
 		return RecordingOutput{}, ErrNotInitialized
+	}
+
+	termState, err := terminal.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		return RecordingOutput{}, err
 	}
 
 	recOpts := RecordingInput{
@@ -104,12 +100,18 @@ func StartRecording(opSlug string) (RecordingOutput, error) {
 		systemstate.UpdateTermHeight(size.Rows)
 		systemstate.UpdateTermWidth(size.Cols)
 	}
-	go func() {
-		copyRouter([]io.Writer{recConfig.ptyWriter, recConfig.dialogWriter}, os.Stdin, &recConfig.writeTarget)
-	}()
+
+	if !copyStarted {
+		go func() {
+			copyRouter([]io.Writer{recConfig.ptyWriter, recConfig.dialogWriter}, os.Stdin, &recConfig.writeTarget)
+		}()
+		copyStarted = true
+	}
 	recConfig.writeTarget = 0
 	output, err := record(recOpts)
+	terminal.Restore(int(os.Stdin.Fd()), termState)
 	recConfig.writeTarget = 1
+	recConfig.ptyWriter.Write([]byte("a")) // feed a dummy character to force the write target to switch over to the dialog writer
 	return output, err
 }
 

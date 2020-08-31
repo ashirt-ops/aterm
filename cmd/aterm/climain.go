@@ -4,14 +4,12 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/theparanoids/aterm/cmd/aterm/appdialogs"
 	"github.com/theparanoids/aterm/cmd/aterm/config"
 	"github.com/theparanoids/aterm/cmd/aterm/recording"
 	"github.com/theparanoids/aterm/errors"
-	"github.com/theparanoids/aterm/fancy"
 	"github.com/theparanoids/aterm/network"
 )
 
@@ -53,11 +51,7 @@ func main() {
 		return
 	}
 
-	if err := recording.InitializeRecordings(); err != nil {
-		fmt.Println(fancy.Fatal("Got an error starting up", err))
-		return
-	}
-	defer recording.RestoreTerminal()
+	recording.InitializeRecordings()
 
 	menuState := appdialogs.MenuState{
 		InstanceConfig: config.CurrentConfig(),
