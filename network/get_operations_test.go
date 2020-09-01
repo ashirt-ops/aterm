@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/theparanoids/ashirt-server/backend/dtos"
 	"github.com/theparanoids/aterm/network"
 )
 
@@ -20,7 +21,7 @@ func TestGetOperations(t *testing.T) {
 	network.SetBaseURL("http://localhost" + testPort)
 
 	ops, err := network.GetOperations()
-	var op1, op2 network.Operation
+	var op1, op2 dtos.Operation
 	json.Unmarshal([]byte(op1Raw), &op1)
 	json.Unmarshal([]byte(op2Raw), &op2)
 

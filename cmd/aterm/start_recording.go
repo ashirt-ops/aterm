@@ -9,8 +9,8 @@ import (
 	"os"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/pkg/errors"
 	"github.com/theparanoids/aterm/common"
+	"github.com/theparanoids/aterm/errors"
 	"github.com/theparanoids/aterm/eventers"
 	"github.com/theparanoids/aterm/formatters"
 	"github.com/theparanoids/aterm/recorders"
@@ -60,6 +60,5 @@ func record(ri RecordingInput) (RecordingOutput, error) {
 	if err != nil {
 		return result, errors.Wrap(err, `Unable to start the recording. Shell path: "`+ri.Shell+`"`)
 	}
-	err = tw.Close()
-	return result, errors.Wrap(err, "Issue closing file writer")
+	return result, errors.MaybeWrap(tw.Close(), "Issue closing file writer")
 }

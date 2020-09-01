@@ -6,25 +6,32 @@ package network_test
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/theparanoids/aterm/network"
 )
 
+func Now() string {
+	return time.Now().Format("2006-01-02T15:04:05Z07:00")
+}
+
 func TestUpload(t *testing.T) {
 	t.Skip("skipping network tests")
 	var written []byte
-	makeServer(Route{"POST", "/api/operations/first/evidence", newRequestRecorder(201, "", &written)})
-	network.SetBaseURL("http://localhost" + testPort)
 
 	uploadInput := network.UploadInput{
 		OperationSlug: "first",
 		Description:   "abcd",
+		ContentType:   network.ContentTypeTerminalRecording,
 		Filename:      "dolphin",
 		Content:       bytes.NewReader([]byte("abc123")),
 	}
 
-	err := network.UploadToAshirt(uploadInput)
+	makeServer(Route{"POST", "/api/operations/first/evidence", newRequestRecorder(201, `{"uuid": "0000", "description": "`+uploadInput.Description+`", "occurredAt": "`+Now()+`"}`, &written)})
+	network.SetBaseURL("http://localhost" + testPort)
+
+	_, err := network.UploadToAshirt(uploadInput)
 
 	require.Nil(t, err)
 }
@@ -38,11 +45,12 @@ func TestUploadFailedWithJSONError(t *testing.T) {
 	uploadInput := network.UploadInput{
 		OperationSlug: "second",
 		Description:   "abcd",
+		ContentType:   network.ContentTypeTerminalRecording,
 		Filename:      "dolphin",
 		Content:       bytes.NewReader([]byte("abc123")),
 	}
 
-	err := network.UploadToAshirt(uploadInput)
+	_, err := network.UploadToAshirt(uploadInput)
 	require.Error(t, err)
 }
 
@@ -55,10 +63,11 @@ func TestUploadFailedWithUnknownJSON(t *testing.T) {
 	uploadInput := network.UploadInput{
 		OperationSlug: "third",
 		Description:   "abcd",
+		ContentType:   network.ContentTypeTerminalRecording,
 		Filename:      "dolphin",
 		Content:       bytes.NewReader([]byte("abc123")),
 	}
 
-	err := network.UploadToAshirt(uploadInput)
+	_, err := network.UploadToAshirt(uploadInput)
 	require.Error(t, err)
 }

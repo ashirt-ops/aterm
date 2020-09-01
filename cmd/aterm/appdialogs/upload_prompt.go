@@ -11,15 +11,15 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pkg/errors"
 	"github.com/theparanoids/ashirt-server/backend/dtos"
 	"github.com/theparanoids/aterm/dialog"
+	"github.com/theparanoids/aterm/errors"
 	"github.com/theparanoids/aterm/fancy"
 	"github.com/theparanoids/aterm/network"
 )
 
-var errorCancelled = errors.New("Cancelled")
-var errorAlreadyExists = errors.New("Already Exists")
+var ErrCancelled = fmt.Errorf("Cancelled")
+var ErrAlreadyExists = fmt.Errorf("Already Exists")
 
 var operationOptions = []dialog.Option{}
 
@@ -78,7 +78,7 @@ func showUploadSubmenu() dialog.OptionActionResponse {
 func tryUpload() error {
 	defaults := uploadStoreData.DefaultData
 	if !network.BaseURLSet() {
-		return errors.New("No service url specified -- check configuration")
+		return fmt.Errorf("No service url specified -- check configuration")
 	}
 
 	path, err := UserQuery("Enter a filename", &defaults.FilePath)
@@ -131,6 +131,7 @@ func tryUpload() error {
 		input := network.UploadInput{
 			OperationSlug: slugResp.Value.(string),
 			Description:   description,
+			ContentType:   network.ContentTypeTerminalRecording,
 			Filename:      name,
 			TagIDs:        tagsToIDs(selectedTags),
 			Content:       bytes.NewReader(data),
@@ -141,7 +142,7 @@ func tryUpload() error {
 		stop := false
 		var err error
 		go func() {
-			err = network.UploadToAshirt(input)
+			_, err = network.UploadToAshirt(input)
 			wg.Done()
 		}()
 		go dialog.ShowLoadingAnimation("Loading", &stop)
@@ -149,7 +150,7 @@ func tryUpload() error {
 		stop = true
 		fmt.Println(fancy.ClearLine(fancy.GreenCheck()+" File uploaded", 0))
 
-		return errors.Wrap(err, "Could not upload")
+		return errors.MaybeWrap(err, "Could not upload")
 	}
 
 	return CanceledOperation{
@@ -198,9 +199,9 @@ func askForTags(operationSlug string, allTags []dtos.Tag, selectedTagIDs []int64
 		} else if choice == createVal {
 			newTag, err := askForNewTag(operationSlug, allTags)
 			if err != nil {
-				if err == errorCancelled {
+				if err == ErrCancelled {
 					fmt.Println("Tag creation cancelled")
-				} else if err == errorAlreadyExists {
+				} else if err == ErrAlreadyExists {
 					toggleValue(&selectedTagIDs, newTag.ID)
 				} else {
 					fmt.Println("Unable to create tag. Error: " + err.Error())
@@ -235,12 +236,12 @@ func askForNewTag(operationSlug string, allTags []dtos.Tag) (*dtos.Tag, error) {
 
 	for _, t := range allTags {
 		if lowerName == strings.ToLower(t.Name) {
-			return &t, errorAlreadyExists
+			return &t, ErrAlreadyExists
 		}
 	}
 
 	if name == "" {
-		return nil, errorCancelled
+		return nil, ErrCancelled
 	}
 	return network.CreateTag(operationSlug, name, network.RandomTagColor())
 }
