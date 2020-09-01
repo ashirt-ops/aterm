@@ -37,7 +37,7 @@ func main() {
 	ptyReader, ptyWriter := io.Pipe()
 	dialogReader, dialogWriter := io.Pipe()
 	writeTarget := 0
-	appdialogs.SetBasicUploadData(cfg.OperationID, dialogReader)
+	appdialogs.SetBasicUploadData(cfg.OperationSlug, dialogReader)
 
 	recOpts := RecordingInput{
 		FileDir:   cfg.OutputDir,

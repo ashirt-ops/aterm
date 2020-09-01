@@ -10,16 +10,16 @@ import (
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
-	"strconv"
 
 	"github.com/pkg/errors"
 )
 
 type UploadInput struct {
-	OperationID int64
-	Description string
-	Filename    string
-	Content     io.Reader
+	OperationSlug string
+	Description   string
+	Filename      string
+	TagIDs        []int64
+	Content       io.Reader
 }
 
 const errCouldNotInitMsg = "Unable to initialize Request"
@@ -27,12 +27,14 @@ const errCouldNotInitMsg = "Unable to initialize Request"
 // UploadToAshirt uploads a terminal recording to the AShirt service. The remote service must
 // be configured by calling network.SetBaseURL(string) before uploading.
 func UploadToAshirt(ui UploadInput) error {
-	url := apiURL + "/operations/" + strconv.FormatInt(ui.OperationID, 10) + "/evidence"
+	url := apiURL + "/operations/" + ui.OperationSlug + "/evidence"
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
+	jsonTags, _ := json.Marshal(ui.TagIDs)
 	fields := map[string]string{
 		"notes":       ui.Description,
 		"contentType": "terminal-recording",
+		"tagIds":      string(jsonTags),
 	}
 	for k, v := range fields {
 		err := writer.WriteField(k, v)

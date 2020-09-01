@@ -4,9 +4,13 @@
 package network
 
 import (
+	"encoding/json"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/theparanoids/ashirt-server/signer"
 )
 
@@ -49,4 +53,46 @@ func addAuthentication(req *http.Request) error {
 	}
 	req.Header.Set("Authorization", authorization)
 	return nil
+}
+
+func evaluateResponseStatusCode(code int) error {
+	switch {
+	case code == http.StatusUnauthorized:
+		return errors.New("Unable to authenticate with server. Please check credentials")
+	case code == http.StatusInternalServerError:
+		return errors.New("Server encountered an error")
+	}
+	if code != http.StatusOK && code != http.StatusCreated {
+		return errors.New(errCannotConnectMsg)
+	}
+	return nil
+}
+
+func readResponseBody(container interface{}, body io.Reader) error {
+	content, err := ioutil.ReadAll(body)
+	if err != nil {
+		return errors.Wrap(err, "Unable to read response")
+	}
+
+	if err := json.Unmarshal(content, &container); err != nil {
+		return errors.Wrap(err, "Unable to parse response")
+	}
+
+	return nil
+}
+
+func makeJSONRequest(method, url string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequest(method, url, body)
+
+	req.Header.Add("Content-Type", "application/json")
+
+	if err != nil {
+		return nil, err
+	}
+
+	if err = addAuthentication(req); err != nil {
+		return nil, err
+	}
+
+	return client.Do(req)
 }
