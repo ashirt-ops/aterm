@@ -96,6 +96,8 @@ func StartRecording(opSlug string) (RecordingOutput, error) {
 	if !recConfig.isCopying {
 		go func() {
 			copyRouter([]io.Writer{recConfig.ptyWriter, recConfig.dialogWriter}, os.Stdin, &recConfig.writeTarget)
+			// the above shouldn't end, but just in case, this should help it start back up on next recording.
+			recConfig.isCopying = false
 		}()
 		recConfig.isCopying = true
 	}
