@@ -61,8 +61,8 @@ The configuration file adheres to the XDG standard, where applicable. If you hav
 
 ### Known Issues
 
-1. Starting second recording (and beyond) in the same session eats the first character typed.
-2. pressing the delete (not backspace) key generates a `^d` signal, causing input to fail
+1. pressing the delete (not backspace) key generates a `^d` signal, causing input to fail
+2. Exiting a recording with `^d` prevents arrow keys from working when the terminal returns. this is due to the terminal being placed into application mode (rather than interactive mode). Navigation with the `j` and `k` keys will continue to work. Entering a new shell and exiting with `exit` will return the application to interactive mode.
 
 ## Development Overview
 
