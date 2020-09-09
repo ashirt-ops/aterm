@@ -101,3 +101,18 @@ var apiURLFields = AskForTemplateFields{
 	Preamble:     "Where are the ASHIRT servers located? If you don't know, please contact your administrator.",
 	Prompt:       "Enter the API URL",
 }
+
+var upgradeNoticeTemplate = template.Must(fancyTemplate.New("upgradeNotice").Parse(
+	"{{clear}}The latest {{.ReleaseType}} release ({{.Version | bold}}) can be found here: {{.URL | underlined}}" +
+		"\n\r",
+))
+
+type UpgradeNoticeTemplateFields struct {
+	ReleaseType string
+	Version     string
+	URL         string
+}
+
+func NewUpgrade(releaseType, tag, url string) UpgradeNoticeTemplateFields {
+	return UpgradeNoticeTemplateFields{ReleaseType: releaseType, Version: tag, URL: url}
+}

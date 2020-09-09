@@ -39,7 +39,7 @@ func NewSemVer(ma, mi, pa int, ex string) SemVer {
 	return SemVer{Major: ma, Minor: mi, Patch: pa, Extra: ex}
 }
 
-// String reconstructs a semver string 
+// String reconstructs a semver string
 func (s SemVer) String() string {
 	return fmt.Sprintf("v%v.%v.%v%v", s.Major, s.Minor, s.Patch, s.Extra)
 }
