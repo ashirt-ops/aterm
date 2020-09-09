@@ -53,6 +53,9 @@ func main() {
 		return
 	}
 
+	// TOOD: replace version, owner, repo with real values
+	appdialogs.NotifyUpdate("v30.0.0", "google", "go-github")
+
 	recording.InitializeRecordings()
 
 	menuState := appdialogs.MenuState{
