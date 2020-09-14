@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 
 	"github.com/OpenPeeDeeP/xdg"
@@ -19,17 +20,17 @@ import (
 )
 
 func configHome() string {
-	return filepath.Join(xdg.ConfigHome(), "ashirt")
+	return filepath.Join(xdg.DataHome(), "aterm")
 }
 
 // ASHIRTConfigPath points to the configuration file used by the ASHIRT application
 func ASHIRTConfigPath() string {
-	return filepath.Join(configHome(), "screenshot.json")
+	return filepath.Join(xdg.DataHome(), "ashirt", "config.json")
 }
 
 // ATermConfigPath points to where the terminal recorder config is located
 func ATermConfigPath() string {
-	return filepath.Join(configHome(), "aterm.yaml")
+	return filepath.Join(configHome(), "config.yaml")
 }
 
 // ParseConfig returns the parsed configuration, based on built-in defaults, config file values,
@@ -154,8 +155,9 @@ func CloneLoadedConfigAsOverrides() TermRecorderConfigOverrides {
 	return CloneConfigAsOverrides(loadedConfig)
 }
 
-func (t *TermRecorderConfig) WriteConfigToFile(path string) error {
-	outFile, err := os.Create(path)
+func (t *TermRecorderConfig) WriteConfigToFile(configFilePath string) error {
+	os.MkdirAll(path.Dir(configFilePath), 0755)
+	outFile, err := os.Create(configFilePath)
 	if err != nil {
 		return errors.Wrap(err, "Unable to create config file")
 	}

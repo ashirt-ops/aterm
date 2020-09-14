@@ -66,3 +66,9 @@ func ShowConfigurationParsingErrorMessage(err error) {
 	printline(" " + fancy.WithPizzazz(err.Error(), fancy.Red))
 	printline("Execution will continue, but some features may not work until the above issue is fixed")
 }
+
+func ShowUnableToSaveConfigErrorMessage(err error) {
+	printline("I was unable to save the updated configuration data. I encountered this error:")
+	printline(" " + fancy.WithPizzazz(err.Error(), fancy.Red))
+	printline("Settings will be saved for this run, but will need to be reconfigured the next time you start.")
+}

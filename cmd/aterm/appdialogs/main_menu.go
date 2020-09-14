@@ -162,7 +162,9 @@ func editConfig(runningConfig config.TermRecorderConfig) config.TermRecorderConf
 	switch {
 	case yesPermanently == selection:
 		config.SetConfig(newCfg)
-		config.WriteConfig()
+		if err := config.WriteConfig(); err != nil {
+			ShowUnableToSaveConfigErrorMessage(err)
+		}
 		fallthrough
 	case yesTemporarily == selection:
 		network.SetAccessKey(newCfg.AccessKey)
