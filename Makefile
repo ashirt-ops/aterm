@@ -29,7 +29,11 @@ build-all: build-linux build-osx
 
 .PHONY: build-test
 build-test: update
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/jrozner/go-info.version=v0.0.0-development -X github.com/jrozner/go-info.commitHash=$(shell git rev-list -1 HEAD) -X github.com/jrozner/go-info.buildDate=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')" -o dist/aterm/linux/aterm cmd/aterm/*.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags \
+		"-X github.com/jrozner/go-info.version=v0.0.0-development\
+		 -X github.com/jrozner/go-info.commitHash=$(shell git rev-list -1 HEAD)\
+		 -X github.com/jrozner/go-info.buildDate=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+		 -o dist/aterm/linux/aterm cmd/aterm/*.go
 
 .PHONY: build-linux
 build-linux: update
