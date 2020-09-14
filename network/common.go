@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/theparanoids/ashirt-server/signer"
@@ -26,7 +27,11 @@ var secretKey []byte
 // Note: this function only requires the url to reach the frontend service.
 // routes will be deduced from that.
 func SetBaseURL(url string) {
-	apiURL = url + "/api"
+	apiURL = url
+	if !strings.HasSuffix(apiURL, "/") {
+		apiURL += "/"
+	}
+	apiURL += "api"
 }
 
 // BaseURLSet is a small check to verify that some value exists for the BaseURL
