@@ -5,6 +5,7 @@ go 1.14
 require (
 	github.com/creack/pty v1.1.11
 	github.com/jonboulle/clockwork v0.1.0
+	github.com/jrozner/go-info v0.0.0-20200714032727-ca40982ac1a5
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/manifoldco/promptui v0.7.0
 	github.com/mattn/go-colorable v0.1.4 // indirect

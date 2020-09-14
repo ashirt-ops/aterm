@@ -12,6 +12,7 @@ import (
 	"github.com/creack/pty"
 	"golang.org/x/crypto/ssh/terminal"
 
+	"github.com/jrozner/go-info"
 	"github.com/theparanoids/aterm/cmd/aterm/appdialogs"
 	"github.com/theparanoids/aterm/cmd/aterm/config"
 	"github.com/theparanoids/aterm/fancy"
@@ -77,6 +78,11 @@ func readConfig() config.TermRecorderConfig {
 	shouldContinue := true
 
 	appConfig := config.Parse()
+	if info.Flag() {
+		info.Print()
+		os.Exit(-1)
+	}
+
 	issues := validateConfig(appConfig)
 
 	allIssues := append(convertConfigIssuesToStartupIssues(appConfig), issues...)
