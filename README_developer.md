@@ -17,6 +17,16 @@ There's a soft requirement of Make as well, though this can be omitted if the ma
 
 Executables can be created via the stanard `go build` tool from the `cmd/aterm` directory.
 
+### Versioning
+
+This application can render its build details, including version to the user. These details are provided to the application as build flags, using the `ldflags` argument. This is accomplished by setting fields for:
+
+* `github.com/jrozner/go-info.version` for the tagged release version
+* `github.com/jrozner/go-info.commitHash` for the git hash used for this release
+* `github.com/jrozner/go-info.buildDate` for the actual date this release was built
+
+These fields are populated during ci, using GitHub Action's environment variables for these fields. These correspond to the fields `GITHUB_REF` and `GITHUB_SHA`. Dates are generated via the build system's date.
+
 ## Project Structure
 
 ### Phase 1: Terminal recording
