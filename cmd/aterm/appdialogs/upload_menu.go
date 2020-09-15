@@ -107,20 +107,18 @@ func renameRecording(metadata RecordingMetadata) RecordingMetadata {
 
 func discardRecording(metadata RecordingMetadata) RecordingMetadata {
 	rtnMetadata := metadata
-	no := dialog.SimpleOption{Label: "No"}
-	yes := dialog.SimpleOption{Label: "Yes"}
 
-	selection, err := PlainSelect("Are you sure you want to delete this recording", []dialog.SimpleOption{no, yes})
+	selection, err := YesNoSelect("Are you sure you want to delete this recording", "")
 
 	switch {
-	case yes == selection:
+	case true == selection:
 		err := os.Remove(metadata.FilePath)
 		if err != nil {
 			printfln("Unable to delete recording at: %v", fancy.WithBold(metadata.FilePath))
 			printline(fancy.Fatal("Error", err))
 		}
 		rtnMetadata = RecordingMetadata{}
-	case no == selection:
+	case false == selection:
 		break
 	case err != nil:
 		printline(fancy.Caution("I got an error handling that respone", err))

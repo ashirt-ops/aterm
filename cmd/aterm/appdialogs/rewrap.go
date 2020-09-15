@@ -11,3 +11,8 @@ func UserQuery(question string, defaultValue *string) (string, error) {
 func PlainSelect(label string, options []dialog.SimpleOption) (dialog.SimpleOption, error) {
 	return dialog.PlainSelect(label, options, internalMenuState.DialogInput)
 }
+
+// YesNoSelect is a re-packaing of the dialog.YesNoPrompt with inputStream pre-provided
+func YesNoSelect(label, details string) (bool, error) {
+	return dialog.YesNoPrompt(label, details, internalMenuState.DialogInput)
+}
