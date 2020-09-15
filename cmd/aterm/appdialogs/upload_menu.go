@@ -84,16 +84,19 @@ func renameRecording(metadata RecordingMetadata) RecordingMetadata {
 	rtnMetadata := metadata
 
 	dir, originalName := filepath.Split(metadata.FilePath)
-	filename, err := queryWithDefault("Enter a new filename", &originalName)
+	resp := queryWithDefault("Enter a new filename", &originalName, func() {})
 
-	if err != nil {
-		printline(fancy.Fatal("Unable to move file", err))
-	} else if filename != originalName {
+	if resp.IsKillSignal() {
+		return rtnMetadata
+	} else if resp.Err != nil {
+		printline(fancy.Fatal("Unable to move file", resp.Err))
+	} else if resp.SafeValue() != originalName {
+		filename := resp.SafeValue()
 		if !strings.HasSuffix(filename, ".cast") {
 			filename += ".cast"
 		}
 		newPath := filepath.Join(dir, filename)
-		err = os.Rename(metadata.FilePath, newPath)
+		err := os.Rename(metadata.FilePath, newPath)
 		if err != nil {
 			printline(fancy.Fatal("Unable to move file", err))
 		} else {

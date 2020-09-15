@@ -133,13 +133,32 @@ func editConfig(runningConfig config.TermRecorderConfig) config.TermRecorderConf
 	rtnConfig := runningConfig
 	overrideCfg := config.CloneConfigAsOverrides(runningConfig)
 
-	overrideCfg.AccessKey = askFor(accessKeyFields, overrideCfg.AccessKey).Value
-	overrideCfg.SecretKey = askFor(secretKeyFields, overrideCfg.SecretKey).Value
-	overrideCfg.APIURL = askFor(apiURLFields, overrideCfg.APIURL).Value
+	// iterate through each question. After each, check if the user backed out via ^d/^c, and if so, stop asking questions and leave the function
+	type FillQuestion struct {
+		Fields     AskForTemplateFields
+		DefaultVal *string
+		AssignTo   *string
+	}
+	questions := []FillQuestion{
+		FillQuestion{AssignTo: overrideCfg.AccessKey, Fields: accessKeyFields, DefaultVal: overrideCfg.AccessKey},
+		FillQuestion{AssignTo: overrideCfg.SecretKey, Fields: secretKeyFields, DefaultVal: overrideCfg.SecretKey},
+		FillQuestion{AssignTo: overrideCfg.APIURL, Fields: apiURLFields, DefaultVal: overrideCfg.APIURL},
 
-	overrideCfg.RecordingShell = askFor(shellFields, thisOrThat(overrideCfg.RecordingShell, os.Getenv("SHELL"))).Value
-	overrideCfg.OutputDir = askFor(savePathFields, overrideCfg.OutputDir).Value
-	overrideCfg.OperationSlug = askForOperationSlug(internalMenuState.AvailableOperations, runningConfig.OperationSlug)
+		FillQuestion{AssignTo: overrideCfg.RecordingShell, Fields: shellFields, DefaultVal: thisOrThat(overrideCfg.RecordingShell, os.Getenv("SHELL"))},
+		FillQuestion{AssignTo: overrideCfg.OutputDir, Fields: savePathFields, DefaultVal: overrideCfg.OutputDir},
+	}
+
+	stop := false
+	for _, question := range questions {
+		if !stop {
+			question.AssignTo = askFor(question.Fields, question.DefaultVal, func() { stop = true }).Value
+		}
+	}
+
+	if stop {
+		println("Discarding changes...")
+		return rtnConfig
+	}
 
 	newCfg := config.PreviewUpdatedInstanceConfig(runningConfig, overrideCfg)
 

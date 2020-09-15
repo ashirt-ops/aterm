@@ -1,65 +1,41 @@
 package appdialogs
 
 import (
-	"errors"
 	"path/filepath"
 
 	"github.com/OpenPeeDeeP/xdg"
-	"github.com/manifoldco/promptui"
+	"github.com/theparanoids/aterm/dialog"
 	"github.com/theparanoids/aterm/fancy"
 )
 
-type UserAction string
-
-const (
-	UserActionCancel  UserAction = "cancel"
-	UserActionExit    UserAction = "exit"
-	UserActionEntered UserAction = ""
-	UserActionErrored UserAction = "error"
-)
-
-type QueryResponse struct {
-	Value  *string
-	Action UserAction
-	Err    error
-}
-
-func (resp *QueryResponse) IsKillSignal() bool {
-	return resp.Action == UserActionExit || resp.Action == UserActionCancel
-}
-
-func queryWithDefault(prompt string, guessValue *string) (string, error) {
+func queryWithDefault(prompt string, guessValue *string, bailFunc func()) dialog.QueryResponse {
 	if guessValue != nil && *guessValue != "" {
 		prompt += " [" + fancy.AsBlue(*guessValue) + "]"
 	}
 
-	answer, err := UserQuery(prompt, nil)
-	if err != nil {
-		return "", err
+	resp := HandleUserQuery(prompt, nil, bailFunc)
+	if resp.Err != nil {
+		return resp
 	}
-	if answer == "" && guessValue != nil {
-		return *guessValue, nil
+	if resp.Value == nil {
+		resp.Value = strPtr("")
 	}
-	return answer, nil
+
+	if *resp.Value == "" && guessValue != nil {
+		resp.Value = guessValue
+	}
+	return resp
 }
 
 // askFor creates a pretty message, then prompts the user to respond with a free-text field
 // Requires an AskForTemplateFields. If AskForTemplateFields.WithPrompt is false, no pretty message
 // appears. Instead, only the prompt is provided
-func askFor(msg AskForTemplateFields, guessValue *string) QueryResponse {
+func askFor(msg AskForTemplateFields, guessValue *string, bailFunc func()) dialog.QueryResponse {
 	if msg.WithPreamble {
 		askForTemplate.Execute(medium, msg)
 	}
 
-	val, err := queryWithDefault(msg.Prompt, guessValue)
-	if errors.Is(err, promptui.ErrInterrupt) {
-		return QueryResponse{Value: guessValue, Action: UserActionCancel}
-	} else if errors.Is(err, promptui.ErrEOF) {
-		return QueryResponse{Value: guessValue, Action: UserActionExit}
-	} else if err != nil {
-		return QueryResponse{Value: guessValue, Action: UserActionErrored, Err: err}
-	}
-	return QueryResponse{Value: &val}
+	return queryWithDefault(msg.Prompt, guessValue, bailFunc)
 }
 
 // thisOrThat provides a mechansim to return either the provided "this", or if nil, the provided

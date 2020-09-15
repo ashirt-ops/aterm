@@ -3,8 +3,8 @@ package appdialogs
 import (
 	"encoding/json"
 	"io/ioutil"
+	"os"
 
-	"github.com/manifoldco/promptui"
 	"github.com/theparanoids/ashirt-server/backend/dtos"
 	"github.com/theparanoids/aterm/cmd/aterm/config"
 	"github.com/theparanoids/aterm/fancy"
@@ -38,13 +38,13 @@ func FirstRun(primaryConfigFile, pathToCommonConfig string) (config.TermRecorder
 	}
 
 	printline("If the value in [brackets] looks good, simply press enter to accept that value.")
-	configData.APIURL = askFor(apiURLFields, configData.APIURL).Value
+	configData.APIURL = askFor(apiURLFields, configData.APIURL, firstRunBail).Value
 
 	printline("I need to know your credentials to talk to the ASHIRT servers. You can generate a new key from your account settings on the ASHIRT website.")
-	configData.AccessKey = askFor(accessKeyFields, configData.AccessKey).Value
-	configData.SecretKey = askFor(secretKeyFields, configData.SecretKey).Value
+	configData.AccessKey = askFor(accessKeyFields, configData.AccessKey, firstRunBail).Value
+	configData.SecretKey = askFor(secretKeyFields, configData.SecretKey, firstRunBail).Value
 
-	configData.OutputDir = askFor(savePathFields, thisOrThat(configData.OutputDir, defaultRecordingHome)).Value
+	configData.OutputDir = askFor(savePathFields, thisOrThat(configData.OutputDir, defaultRecordingHome), firstRunBail).Value
 
 	checkConnection := true
 
@@ -66,7 +66,7 @@ func FirstRun(primaryConfigFile, pathToCommonConfig string) (config.TermRecorder
 			printf("It looks like the server is not available or the address is wrong.\n")
 			fix, err := dialog.YesNoPrompt("Do you want to try to fix this?", "", medium)
 			if fix && err == nil {
-				configData.APIURL = askFor(apiURLFields, configData.APIURL).Value
+				configData.APIURL = askFor(apiURLFields, configData.APIURL, firstRunBail).Value
 			} else {
 				checkConnection = false
 			}
@@ -74,8 +74,8 @@ func FirstRun(primaryConfigFile, pathToCommonConfig string) (config.TermRecorder
 			printf("The server did not accept your access and secret key.\n")
 			fix, err := dialog.YesNoPrompt("Do you want to try to fix this?", "", medium)
 			if fix && err == nil {
-				configData.AccessKey = askFor(AskForNoPreamble(accessKeyFields), configData.AccessKey).Value
-				configData.SecretKey = askFor(AskForNoPreamble(secretKeyFields), configData.SecretKey).Value
+				configData.AccessKey = askFor(AskForNoPreamble(accessKeyFields), configData.AccessKey, firstRunBail).Value
+				configData.SecretKey = askFor(AskForNoPreamble(secretKeyFields), configData.SecretKey, firstRunBail).Value
 			} else {
 				checkConnection = false
 			}
@@ -130,4 +130,9 @@ func operationsToOptions(ops []dtos.Operation, primarySlug string) []dialog.Simp
 	reordered = append(reordered, operationOptions[firstIndex+1:len(operationOptions)]...)
 
 	return reordered
+}
+
+func firstRunBail() {
+	printline("Exiting without changes")
+	os.Exit(1)
 }
