@@ -25,7 +25,7 @@ type QueryResponse struct {
 }
 
 func (resp *QueryResponse) IsKillSignal() bool {
-	return errors.Is(resp.Err, promptui.ErrInterrupt) || errors.Is(resp.Err, promptui.ErrEOF)
+	return resp.Action == UserActionExit || resp.Action == UserActionCancel
 }
 
 func queryWithDefault(prompt string, guessValue *string) (string, error) {
