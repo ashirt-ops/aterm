@@ -113,7 +113,7 @@ func operationsToOptions(ops []dtos.Operation, primarySlug string) []dialog.Simp
 	for i, op := range ops {
 		suffix := ""
 		if op.Slug == primarySlug {
-			suffix = " (Current)"
+			suffix = fancy.AsBold(" (Current)")
 			firstIndex = i
 		}
 
