@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 
 	"github.com/OpenPeeDeeP/xdg"
 	"github.com/kelseyhightower/envconfig"
@@ -19,18 +20,23 @@ import (
 	"github.com/hashicorp/go-multierror"
 )
 
+// configHome corrects the xdg-equivalent config home directory from the OpenPeeDeeP/xdg library
+// for windows (it is arguably correct in other instances)
 func configHome() string {
-	return filepath.Join(xdg.DataHome(), "aterm")
+	if runtime.GOOS == "windows" {
+		return os.Getenv("LOCALAPPDATA")
+	}
+	return xdg.ConfigHome()
 }
 
 // ASHIRTConfigPath points to the configuration file used by the ASHIRT application
 func ASHIRTConfigPath() string {
-	return filepath.Join(xdg.DataHome(), "ashirt", "config.json")
+	return filepath.Join(configHome(), "ashirt", "config.json")
 }
 
 // ATermConfigPath points to where the terminal recorder config is located
 func ATermConfigPath() string {
-	return filepath.Join(configHome(), "config.yaml")
+	return filepath.Join(configHome(), "aterm", "config.yaml")
 }
 
 // ParseConfig returns the parsed configuration, based on built-in defaults, config file values,
