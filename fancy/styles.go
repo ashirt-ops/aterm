@@ -268,6 +268,36 @@ func AsBlue(s string) string {
 	return codify(cBlue) + s + codify(cDefaultFg)
 }
 
+// AsGreen constructs a string that has it's foreground (letters) green
+// Note: this will remove any foreground color, if set
+func AsGreen(s string) string {
+	return codify(cGreen) + s + codify(cDefaultFg)
+}
+
+// AsRed constructs a string that has it's foreground (letters) red
+// Note: this will remove any foreground color, if set
+func AsRed(s string) string {
+	return codify(cRed) + s + codify(cDefaultFg)
+}
+
+// AsWhite constructs a string that has it's foreground (letters) white
+// Note: this will remove any foreground color, if set
+func AsWhite(s string) string {
+	return codify(cWhite) + s + codify(cDefaultFg)
+}
+
+// AsGreenBg constructs a string that has it's foreground (letters) green
+// Note: this will remove any foreground color, if set
+func AsGreenBg(s string) string {
+	return codify(cGreenBg) + s + codify(cDefaultBg)
+}
+
+// AsRedBg constructs a string that has it's foreground (letters) red
+// Note: this will remove any foreground color, if set
+func AsRedBg(s string) string {
+	return codify(cRedBg) + s + codify(cDefaultBg)
+}
+
 // ClearLine removes all text from the current line, resets the cursor to the start of the line,
 // then calls WithPizzazz(s, flags)
 func ClearLine(s string, flags ...int64) string {
