@@ -94,19 +94,17 @@ func FirstRun(primaryConfigFile, pathToCommonConfig string) (config.TermRecorder
 	return configData, nil
 }
 
-func askForOperationSlug(availableOps []dtos.Operation, currentOperationSlug string) *string {
+func askForOperationSlug(availableOps []dtos.Operation, currentOperationSlug string) dialog.SelectResponse {
+	currentOpSelection := dialog.SimpleOption{Data: dtos.Operation{Slug: currentOperationSlug}}
 	if len(availableOps) == 0 {
-		return &currentOperationSlug
+		return dialog.SelectResponse{Selection: currentOpSelection}
 	}
-	selectedOpOption, err := PlainSelect("Select an Operation", operationsToOptions(availableOps, currentOperationSlug))
+	resp := HandlePlainSelect("Select an Operation", operationsToOptions(availableOps, currentOperationSlug), func() dialog.SimpleOption {
+		printline("Using current value...")
+		return currentOpSelection
+	})
 
-	if errors.Is(err, promptui.ErrInterrupt) {
-		printline(fancy.Caution("I had a problem getting the selected operation. Using the default instead.", err))
-		return &currentOperationSlug
-	}
-	selectedOp := selectedOpOption.Data.(dtos.Operation) // ignoring type check here -- it should never fail
-
-	return &selectedOp.Slug
+	return resp
 }
 
 func operationsToOptions(ops []dtos.Operation, primarySlug string) []dialog.SimpleOption {

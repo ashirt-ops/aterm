@@ -63,10 +63,10 @@ func startNewRecording(state MenuState) MenuState {
 		return rtnState
 	}
 
-	opSlug := askForOperationSlug(state.AvailableOperations, state.InstanceConfig.OperationSlug)
+	resp := askForOperationSlug(state.AvailableOperations, state.InstanceConfig.OperationSlug)
 
 	recordedMetadata := RecordingMetadata{
-		OperationSlug: *opSlug,
+		OperationSlug: unwrapOpSlug(resp),
 	}
 	// rtnState.InstanceConfig.OperationSlug = opSlug
 
@@ -154,6 +154,15 @@ func editConfig(runningConfig config.TermRecorderConfig) config.TermRecorderConf
 			question.AssignTo = askFor(question.Fields, question.DefaultVal, func() { stop = true }).Value
 		}
 	}
+	if !stop {
+		resp := askForOperationSlug(internalMenuState.AvailableOperations, runningConfig.OperationSlug)
+		if resp.IsKillSignal() {
+			stop = true
+		} else {
+			slug := unwrapOpSlug(resp)
+			overrideCfg.OperationSlug = &slug
+		}
+	}
 
 	if stop {
 		println("Discarding changes...")
@@ -201,4 +210,11 @@ func editConfig(runningConfig config.TermRecorderConfig) config.TermRecorderConf
 	}
 
 	return rtnConfig
+}
+
+func unwrapOpSlug(selectOpResp dialog.SelectResponse) string {
+	if op, ok := selectOpResp.Selection.Data.(dtos.Operation); ok {
+		return op.Slug
+	}
+	return ""
 }
