@@ -21,18 +21,21 @@ func renderMainMenu(state MenuState) MenuState {
 		dialogOptionExit,
 	}
 
-	selection, err := PlainSelect("What do you want to do", menuOptions)
+	resp := HandlePlainSelect("What do you want to do", menuOptions, func() dialog.SimpleOption {
+		printline("Exiting...")
+		return dialogOptionExit
+	})
 	switch {
-	case dialogOptionStartRecording == selection:
+	case dialogOptionStartRecording == resp.Selection:
 		rtnState.CurrentView = MenuViewRecording
 
-	case dialogOptionExit == selection:
+	case dialogOptionExit == resp.Selection:
 		rtnState.CurrentView = MenuViewExit
 
-	case dialogOptionTestConnection == selection:
+	case dialogOptionTestConnection == resp.Selection:
 		testConnection()
 
-	case dialogOptionUpdateOps == selection:
+	case dialogOptionUpdateOps == resp.Selection:
 		newOps, err := updateOperations()
 		if err != nil {
 			printline(fancy.Caution("Unable to retrieve operations list", err))
@@ -40,12 +43,9 @@ func renderMainMenu(state MenuState) MenuState {
 			rtnState.AvailableOperations = newOps
 		}
 
-	case dialogOptionEditRunningConfig == selection:
+	case dialogOptionEditRunningConfig == resp.Selection:
 		newConfig := editConfig(state.InstanceConfig)
 		rtnState.InstanceConfig = newConfig
-
-	case err != nil:
-		printline(fancy.Caution("I got an error handling that respone", err))
 	default:
 		printline("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
 	}
@@ -185,26 +185,27 @@ func editConfig(runningConfig config.TermRecorderConfig) config.TermRecorderConf
 		yesTemporarily,
 		cancelSave,
 	}
-	selection, err := PlainSelect("Do you want to save these changes", saveChangesOptions)
+	resp := HandlePlainSelect("Do you want to save these changes", saveChangesOptions, func() dialog.SimpleOption {
+		printline("Discarding changes...")
+		return cancelSave
+	})
 
 	switch {
-	case yesPermanently == selection:
+	case yesPermanently == resp.Selection:
 		config.SetConfig(newCfg)
 		if err := config.WriteConfig(); err != nil {
 			ShowUnableToSaveConfigErrorMessage(err)
 		}
 		fallthrough
-	case yesTemporarily == selection:
+	case yesTemporarily == resp.Selection:
 		network.SetAccessKey(newCfg.AccessKey)
 		network.SetSecretKey(newCfg.SecretKey)
 		network.SetBaseURL(newCfg.APIURL)
 		rtnConfig = newCfg
 
-	case cancelSave == selection:
+	case cancelSave == resp.Selection:
 		break
 
-	case err != nil:
-		printline(fancy.Caution("I got an error handling that respone", err))
 	default:
 		printline("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
 	}

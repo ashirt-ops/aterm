@@ -27,10 +27,12 @@ func renderUploadMenu(state MenuState) MenuState {
 		dialogOptionJumpToMainMenu,
 	}
 
-	selection, err := PlainSelect("What do you want to do", menuOptions)
+	resp := HandlePlainSelect("What do you want to do", menuOptions, func() dialog.SimpleOption {
+		return dialogOptionJumpToMainMenu
+	})
 
 	switch {
-	case dialogOptionUploadRecording == selection:
+	case dialogOptionUploadRecording == resp.Selection:
 		isValid, data := validateRecording(state.RecordedMetadata)
 		if !isValid {
 			break
@@ -46,23 +48,21 @@ func renderUploadMenu(state MenuState) MenuState {
 			}
 		}
 
-	case dialogOptionJumpToMainMenu == selection:
+	case dialogOptionJumpToMainMenu == resp.Selection:
 		saveCompletedRecording(rtnState.RecordedMetadata)
 		rtnState.CurrentView = MenuViewMainMenu
 
-	case dialogOptionDiscardRecording == selection:
+	case dialogOptionDiscardRecording == resp.Selection:
 		newMetadata := discardRecording(state.RecordedMetadata)
 		rtnState.RecordedMetadata = newMetadata
 		if !IsRecordingValid(newMetadata) {
 			rtnState.CurrentView = MenuViewMainMenu
 		}
 
-	case dialogOptionRenameRecording == selection:
+	case dialogOptionRenameRecording == resp.Selection:
 		newMetadata := renameRecording(state.RecordedMetadata)
 		rtnState.RecordedMetadata = newMetadata
 
-	case err != nil:
-		printfln("I got an error handling that respone: %v", fancy.WithBold(err.Error()))
 	default:
 		printline("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
 	}
@@ -313,12 +313,11 @@ func askForSingleTag(allTags []dtos.Tag, selectedTagIDs []int64, alwaysOptions [
 	allTagOptions = append(allTagOptions, lastTagOptions...)
 
 	msg := fmt.Sprintf("Choose your tags (Currently: %v)", fancy.WithBold(strings.Join(selectedTagNames, ", "), 0))
-	selection, err := PlainSelect(msg, allTagOptions)
-	if err != nil {
-		printline(fancy.Caution("I had a problem making that selection", err))
+	resp := HandlePlainSelect(msg, allTagOptions, func() dialog.SimpleOption {
+		printline("Discarding selections...")
 		return dialog.InvalidSelection
-	}
-	return selection
+	})
+	return resp.Selection
 }
 
 func tagsToIDs(tags []dtos.Tag) []int64 {
