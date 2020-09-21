@@ -12,7 +12,7 @@ require (
 	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-isatty v0.0.10 // indirect
 	github.com/stretchr/testify v1.4.0
-	github.com/theparanoids/ashirt-server v0.0.0-20200708052605-7c5b90cde657
+	github.com/theparanoids/ashirt-server v0.0.0-20200922024650-e7b93c90eb90
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	gopkg.in/yaml.v2 v2.3.0
 )
