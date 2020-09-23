@@ -5,6 +5,7 @@ package dialog
 
 import (
 	"io"
+	"os"
 
 	"github.com/manifoldco/promptui"
 )
@@ -15,28 +16,32 @@ func MkBasicSelect(inputStream io.ReadCloser) promptui.Select {
 	return promptui.Select{
 		Stdin:             inputStream,
 		StartInSearchMode: false,
+		Stdout:            &bellSkipper{},
 	}
 }
 
-// Select constructs a Select with the given properties:
+// From: https://github.com/manifoldco/promptui/issues/49#issuecomment-573814976
+// Modifications: Printing to Stdout rather than stderr
+// bellSkipper implements an io.WriteCloser that skips the terminal bell
+// character (ASCII code 7), and writes the rest to os.Stdout. It is used to
+// replace readline.Stdout, that is the package used by promptui to display the
+// prompts.
 //
-// 1. Label and Options as given
-// 2. SearcherContainsCI based on given labels
-// 3. Interpreting of response to provide result
-func Select(label string, options []Option, inputStream io.ReadCloser) OptionActionResponse {
-	p := MkBasicSelect(inputStream)
-	p.Label = label
-	p.Searcher = SearcherContainsCI(OptionSliceToStringSlice(options))
+// This is a workaround for the bell issue documented in
+// https://github.com/manifoldco/promptui/issues/49.
+type bellSkipper struct{}
 
-	items := make([]string, len(options))
-	for i, o := range options {
-		items[i] = o.String()
+// Write implements an io.WriterCloser over os.Stdout, but it skips the terminal
+// bell character.
+func (bs *bellSkipper) Write(b []byte) (int, error) {
+	const charBell = 7 // c.f. readline.CharBell
+	if len(b) == 1 && b[0] == charBell {
+		return 0, nil
 	}
-	p.Items = items
+	return os.Stdout.Write(b)
+}
 
-	selectedItem, _, err := p.Run()
-	if err != nil {
-		return ErroredAction(err)
-	}
-	return options[selectedItem].Action()
+// Close implements an io.WriterCloser over os.Stdout.
+func (bs *bellSkipper) Close() error {
+	return os.Stdout.Close()
 }

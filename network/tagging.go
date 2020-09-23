@@ -9,8 +9,8 @@ import (
 	"math/rand"
 	"net/http"
 
-	"github.com/pkg/errors"
 	"github.com/theparanoids/ashirt-server/backend/dtos"
+	"github.com/theparanoids/aterm/errors"
 )
 
 // GetTags retrieves a list of all tags from the server for the given operation slug
@@ -19,16 +19,14 @@ func GetTags(operationSlug string) ([]dtos.Tag, error) {
 
 	resp, err := makeJSONRequest("GET", apiURL+"/operations/"+operationSlug+"/tags", http.NoBody)
 	if err != nil {
-		return tags, errors.Wrap(err, errCannotConnectMsg)
+		return tags, errors.Append(err, ErrCannotConnect)
 	}
 
 	if err = evaluateResponseStatusCode(resp.StatusCode); err != nil {
 		return tags, err
 	}
 
-	err = readResponseBody(&tags, resp.Body)
-
-	return tags, err
+	return tags, errors.MaybeWrap(readResponseBody(&tags, resp.Body), "Unable to retrieve tags")
 }
 
 // CreateTag generates a new tag on the backend. If successful, the new tag with tag ID will
@@ -48,7 +46,7 @@ func CreateTag(operationSlug, name, colorName string) (*dtos.Tag, error) {
 	resp, err := makeJSONRequest("POST", apiURL+"/operations/"+operationSlug+"/tags", bytes.NewReader(content))
 
 	if err != nil {
-		return nil, errors.Wrap(err, errCannotConnectMsg)
+		return nil, errors.Append(err, ErrCannotConnect)
 	}
 
 	if err = evaluateResponseStatusCode(resp.StatusCode); err != nil {

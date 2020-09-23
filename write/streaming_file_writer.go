@@ -9,7 +9,6 @@ import (
 
 	"github.com/theparanoids/aterm/common"
 	"github.com/theparanoids/aterm/formatters"
-	"github.com/theparanoids/aterm/isthere"
 )
 
 // StreamingFileWriter is the preferred TerminalWriter that writes to a file as soon as
@@ -79,7 +78,7 @@ func (fw StreamingFileWriter) Filepath() string {
 
 // noErrorWrite actually just passes the errors along now.
 func noErrorWrite(bytes []byte, err error, Write func(b []byte) (n int, err error)) {
-	if isthere.No(err) {
+	if err == nil {
 		Write(bytes)
 	}
 }
