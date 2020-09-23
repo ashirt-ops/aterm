@@ -1,7 +1,6 @@
 package appdialogs
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/theparanoids/aterm/fancy"
@@ -12,15 +11,18 @@ import (
 func NotifyUpdate(currentVersion, owner, repo string) {
 	currentSemVer := network.ParseVersion(currentVersion)
 	if currentSemVer.String() == "v0.0.0-development" {
-		fmt.Println("This appears to be a development release")
+		printline("This appears to be a development release")
+		return
+	} else if currentSemVer.String() == "v0.0.0-unversioned" {
+		printline("This application appears to be missing a version")
 		return
 	}
 
 	res, err := network.CheckVersion(owner, repo, currentSemVer)
 	if err != nil {
-		fmt.Println("Unable to check for updates", err)
+		printline("Unable to check for updates", err)
 	} else if res.HasUpgrade() {
-		fmt.Println(fancy.AsBold("There is an update available."))
+		printline(fancy.AsBold("There is an update available."))
 		if res.MajorUpgrade != nil {
 			upgradeNoticeTemplate.Execute(os.Stdout, NewUpgrade("major", (*res.MajorUpgrade).String(), (*res.MajorRelease).GetHTMLURL()))
 		}

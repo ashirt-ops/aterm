@@ -165,7 +165,7 @@ func editConfig(runningConfig config.TermRecorderConfig) config.TermRecorderConf
 	}
 
 	if stop {
-		println("Discarding changes...")
+		printline("Discarding changes...")
 		return rtnConfig
 	}
 
