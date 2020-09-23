@@ -72,7 +72,7 @@ jobs:
 
     - name: Build Executable
       run: |
-        go build -o cmd/aterm/aterm -ldflags "-X github.com/jrozner/go-info.version=${GITHUB_REF} -X github.com/jrozner/go-info.commitHash=${GITHUB_SHA} -X github.com/jrozner/go-info.buildDate=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" cmd/aterm/*.go
+        go build -o cmd/aterm/aterm -ldflags "-X github.com/jrozner/go-info.version=${GITHUB_REF} -X github.com/jrozner/go-info.commitHash=${GITHUB_SHA} -X github.com/jrozner/go-info.buildDate=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" -X github.com/theparanoids/aterm/cmd/config.codeRepoRaw=${GITHUB_REPOSITORY} cmd/aterm/*.go
 
     - name: package
       run: |

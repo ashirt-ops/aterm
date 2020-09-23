@@ -8,8 +8,16 @@ import (
 	"github.com/jrozner/go-info"
 )
 
+var codeRepoRaw string
+var codeRepo string
+var codeOwner string
+
+const UnknownCodeRepo = "???"
+const UnknownCodeOwner = "???"
+
 var parsedVersionData *info.Data
 var tagRegex = regexp.MustCompile(`.*?(?:tags/)?v(.*)`)
+var ownerRepoRegex = regexp.MustCompile(`^([^/]+)/(.*)`)
 
 func getData() *info.Data {
 	if parsedVersionData == nil {
@@ -49,4 +57,25 @@ func GoRuntime() string {
 // BuildDate extracts the build date from the build flags and formats the date in rfc 3339 format
 func BuildDate() string {
 	return getData().BuildDate.Format(time.RFC3339)
+}
+
+func CodeRepo() string {
+	return codeRepo
+}
+
+func CodeOwner() string {
+	return codeOwner
+}
+
+// returns a tuple of (owner, repo).
+func parseCodeOwner() (string, string) {
+	if codeRepo == "" {
+		matches := ownerRepoRegex.FindStringSubmatch(codeRepoRaw)
+		if matches != nil {
+			codeOwner, codeRepo = matches[1], matches[2]
+		} else {
+			codeOwner, codeRepo = UnknownCodeOwner, UnknownCodeRepo
+		}
+	}
+	return codeOwner, codeRepo
 }
