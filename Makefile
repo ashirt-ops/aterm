@@ -1,5 +1,10 @@
 include .env
 
+DEV_VERSION_FLAG=-X github.com/jrozner/go-info.version=v0.0.0-development
+DEV_COMMIT_FLAG=-X github.com/jrozner/go-info.commitHash=$(shell git rev-list -1 HEAD)
+DEV_DATE_FLAG=-X github.com/jrozner/go-info.buildDate=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
+LD_FLAGS=-ldflags "$(DEV_VERSION_FLAG) $(DEV_COMMIT_FLAG) $(DEV_DATE_FLAG)"
+
 .env:
 	cp .env_template .env
 
@@ -29,19 +34,15 @@ build-all: build-linux build-osx
 
 .PHONY: build-test
 build-test: update
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags \
-		"-X github.com/jrozner/go-info.version=v0.0.0-development \
-		 -X github.com/jrozner/go-info.commitHash=$(shell git rev-list -1 HEAD) \
-		 -X github.com/jrozner/go-info.buildDate=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-		  -o dist/aterm/linux/aterm cmd/aterm/*.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LD_FLAGS) -o dist/aterm/linux/aterm cmd/aterm/*.go
 
 .PHONY: build-linux
 build-linux: update
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o dist/aterm/linux/aterm cmd/aterm/*.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LD_FLAGS) -o dist/aterm/linux/aterm cmd/aterm/*.go
 
 .PHONY: build-osx
 build-osx: update
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o dist/aterm/osx/aterm cmd/aterm/*.go
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build $(LD_FLAGS) -o dist/aterm/osx/aterm cmd/aterm/*.go
 
 .PHONY: run-env
 run-env:
@@ -51,19 +52,19 @@ run-env:
 
 .PHONY: run
 run:
-	go run cmd/aterm/*.go
+	go run $(LD_FLAGS) cmd/aterm/*.go
 
 .PHONY: run-menu
 run-menu:
-	go run cmd/aterm/*.go -menu
+	go run $(LD_FLAGS) cmd/aterm/*.go -menu
 
 .PHONY: run-reset-hard
 run-reset-hard:
-	go run cmd/aterm/*.go -reset-hard
+	go run $(LD_FLAGS) cmd/aterm/*.go -reset-hard
 
 .PHONY: debug
 debug:
-	go run cmd/aterm/*.go 2>debug.log
+	go run $(LD_FLAGS) cmd/aterm/*.go 2>debug.log
 
 # prep is shorthand for formatting and testing. Useful when prepping for a new Pull Request.
 .PHONY: prep
