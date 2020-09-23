@@ -48,14 +48,13 @@ func main() {
 		opts.ShowMenu = true
 	}
 
+	appdialogs.NotifyUpdate(config.Version(), config.CodeOwner(), config.CodeRepo())
+
 	// Check CLI flags
 	if opts.PrintConfig {
 		config.PrintLoadedConfig(os.Stdout)
 		return
 	}
-
-	// TOOD: replace version, owner, repo with real values
-	appdialogs.NotifyUpdate("v30.0.0", "google", "go-github")
 
 	recording.InitializeRecordings()
 
