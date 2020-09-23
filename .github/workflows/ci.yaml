@@ -71,7 +71,8 @@ jobs:
       run: go test -v ./...
 
     - name: Build Executable
-      run: go build -o cmd/aterm/aterm cmd/aterm/*.go
+      run: |
+        go build -o cmd/aterm/aterm -ldflags "-X github.com/jrozner/go-info.version=${GITHUB_REF} -X github.com/jrozner/go-info.commitHash=${GITHUB_SHA} -X github.com/jrozner/go-info.buildDate=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" cmd/aterm/*.go
 
     - name: package
       run: |

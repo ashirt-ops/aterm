@@ -17,6 +17,7 @@ func main() {
 	// Parse CLI for overrides
 	opts := config.ParseCLI()
 
+	appdialogs.PrintVersion()
 	// Parse env/config file for base values
 	var err error
 	if opts.HardReset {

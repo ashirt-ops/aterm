@@ -157,6 +157,10 @@ github.com/jmoiron/sqlx v1.2.0/go.mod h1:1FEQNm3xlJgrMD+FBdI9+xvCksHtbpVBBw5dYhB
 github.com/joho/godotenv v1.3.0/go.mod h1:7hK45KPybAkOC6peb+G5yklZfMxEjkZhHbwpqxOKXbg=
 github.com/jonboulle/clockwork v0.1.0 h1:VKV+ZcuP6l3yW9doeqz6ziZGgcynBVQO+obU0+0hcPo=
 github.com/jonboulle/clockwork v0.1.0/go.mod h1:Ii8DK3G1RaLaWxj9trq07+26W01tbo22gdxWY5EU2bo=
+github.com/jrozner/go-info v0.0.0-20200714032727-ca40982ac1a5 h1:umtwV+xwWM0+1lmkIjPoEtG3soa0THYJAlgh0g1JEzY=
+github.com/jrozner/go-info v0.0.0-20200714032727-ca40982ac1a5/go.mod h1:12OcwzmFfs4uOwiHIdYxkneoKfjHfPFI6JR5FlWv7o4=
+github.com/jrozner/go-info v0.0.0-20200923180815-246aef93e85e h1:iMjFF2tM7ep416cmkTADjjU9t7/D1z2xtfymMLvTUGc=
+github.com/jrozner/go-info v0.0.0-20200923180815-246aef93e85e/go.mod h1:12OcwzmFfs4uOwiHIdYxkneoKfjHfPFI6JR5FlWv7o4=
 github.com/json-iterator/go v1.1.6/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCVDaaPEHmU=
 github.com/json-iterator/go v1.1.7/go.mod h1:KdQUCv79m/52Kvf8AW2vK1V8akMuk1QjK/uOdHXbAo4=
 github.com/json-iterator/go v1.1.8/go.mod h1:KdQUCv79m/52Kvf8AW2vK1V8akMuk1QjK/uOdHXbAo4=
