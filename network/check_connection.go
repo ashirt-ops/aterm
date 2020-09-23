@@ -27,7 +27,7 @@ func TestConnection() (string, error) {
 	statusCode := resp.StatusCode
 	if statusCode == http.StatusOK {
 		var cc dtos.CheckConnection
-		if err = readResponseBody(&cc, resp.Body); err != nil || cc.Connected == false {
+		if err = readResponseBody(&cc, resp.Body); err != nil || cc.Ok == false {
 			return "Check API URL", ErrOutOfDateServer
 		}
 
