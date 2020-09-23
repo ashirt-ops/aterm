@@ -4,9 +4,9 @@
 package write
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 )
 
 // NewFile creates and opens a file at the named location, or name is empty, creates a new
@@ -14,11 +14,15 @@ import (
 // This file will be prefixed with "recording_". Under the hood, uses ioutil.TempFile in this case.
 func NewFile(dir, name string) (*os.File, error) {
 	var realFile *os.File
-	var err error
+	err := os.MkdirAll(dir, 0775)
+	if err != nil {
+		return nil, err
+	}
+
 	if name == "" {
-		realFile, err = ioutil.TempFile(dir, "recording_")
+		realFile, err = ioutil.TempFile(dir, "recording_*.cast")
 	} else {
-		filename := fmt.Sprintf("%v%v%v", dir, os.PathSeparator, name)
+		filename := filepath.Join(dir, name)
 		realFile, err = os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	}
 

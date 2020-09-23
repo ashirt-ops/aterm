@@ -6,88 +6,103 @@ package network
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
-	"strconv"
 
-	"github.com/pkg/errors"
+	"github.com/theparanoids/ashirt-server/backend/dtos"
+	"github.com/theparanoids/aterm/errors"
 )
 
+const (
+	// ContentTypeTerminalRecording is the content type used for any terminal recording
+	ContentTypeTerminalRecording = "terminal-recording"
+	// ContentTypeScreenshot is the content type used for images (Screenshot or otherwise)
+	ContentTypeScreenshot = "image"
+	// ContentTypeCodeblock is the content type used for code blocks/text-based content
+	ContentTypeCodeblock = "codeblock"
+	// ContentTypeNone is the content type used for no-content evidence (i.e. description only)
+	ContentTypeNone = "none"
+)
+
+// UploadInput provides a manifest for outgoing evidence.
 type UploadInput struct {
-	OperationID int64
-	Description string
-	Filename    string
-	Content     io.Reader
+	OperationSlug string
+	Description   string
+	ContentType   string
+	Filename      string
+	TagIDs        []int64
+	Content       io.Reader
 }
 
-const errCouldNotInitMsg = "Unable to initialize Request"
+const ErrCouldNotInitMsg = "Unable to initialize Request"
 
 // UploadToAshirt uploads a terminal recording to the AShirt service. The remote service must
 // be configured by calling network.SetBaseURL(string) before uploading.
-func UploadToAshirt(ui UploadInput) error {
-	url := apiURL + "/operations/" + strconv.FormatInt(ui.OperationID, 10) + "/evidence"
+func UploadToAshirt(ui UploadInput) (*dtos.Evidence, error) {
+	url := apiURL + "/operations/" + ui.OperationSlug + "/evidence"
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
+	jsonTags, _ := json.Marshal(ui.TagIDs)
 	fields := map[string]string{
 		"notes":       ui.Description,
-		"contentType": "terminal-recording",
+		"contentType": ui.ContentType,
+		"tagIds":      string(jsonTags),
 	}
 	for k, v := range fields {
 		err := writer.WriteField(k, v)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	part, err := writer.CreateFormFile("file", ui.Filename)
 	if err != nil {
-		return errors.Wrap(err, errCouldNotInitMsg)
+		return nil, errors.Wrap(err, ErrCouldNotInitMsg)
 	}
 	_, err = io.Copy(part, ui.Content)
 	if err != nil {
-		return errors.Wrap(err, "Could not copy content")
+		return nil, errors.Wrap(err, "Could not copy content")
 	}
 	err = writer.Close()
 	if err != nil {
-		return errors.Wrap(err, errCouldNotInitMsg)
+		return nil, errors.Wrap(err, ErrCouldNotInitMsg)
 	}
 
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
-		return errors.Wrap(err, errCouldNotInitMsg)
+		return nil, errors.Wrap(err, ErrCouldNotInitMsg)
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	err = addAuthentication(req)
 	if err != nil {
-		return errors.Wrap(err, errCouldNotInitMsg)
+		return nil, errors.Wrap(err, ErrCouldNotInitMsg)
 	}
 
 	resp, err := client.Do(req)
 
 	if err != nil {
-		return errors.Wrap(err, "Unable to send request")
+		return nil, errors.Wrap(err, "Unable to send request")
 	}
 	if resp.StatusCode != 201 {
 		defer resp.Body.Close()
 		raw, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return errors.Wrap(err, "Server did not accept request: Unable to read error response")
+			return nil, errors.Wrap(err, "Server did not accept request: Unable to read error response")
 		}
 		var parsed map[string]string
 		err = json.Unmarshal(raw, &parsed)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		reason, ok := parsed["error"]
 		if !ok {
-			return errors.New("Unable to upload file")
-
+			reason = "(unknown server error)"
 		}
-		return errors.New("Unable to upload file: " + reason)
-
+		return nil, fmt.Errorf("Unable to upload file: " + reason)
 	}
-
-	return nil
+	var evi dtos.Evidence
+	return &evi, errors.MaybeWrap(readResponseBody(&evi, resp.Body), "Upload success, but unable to parse response")
 }

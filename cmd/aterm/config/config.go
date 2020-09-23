@@ -1,156 +1,237 @@
-// Copyright 2020, Verizon Media
-// Licensed under the terms of the MIT. See LICENSE file in project root for terms.
-
 package config
 
 import (
-	"encoding/base64"
-	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
+	"runtime"
 
+	"github.com/OpenPeeDeeP/xdg"
 	"github.com/kelseyhightower/envconfig"
-	"github.com/pkg/errors"
+	"github.com/theparanoids/aterm/errors"
+	"github.com/theparanoids/aterm/fancy"
+	"github.com/theparanoids/aterm/network"
 	"gopkg.in/yaml.v2"
+
+	"github.com/hashicorp/go-multierror"
 )
 
-var configFilePath = filepath.Join(os.Getenv("HOME"), ".config", "ashirt", "term-recorder.yaml")
-
-// TermRecorderConfig is the root configuration file for this application. Config data is loaded from
-// 3 sources: Configuration file, then environment variables, then command line flags.
-type TermRecorderConfig struct {
-	ConfigVersion   int64  `yaml:"configVersion"`
-	OutputDir       string `yaml:"outputDir"      split_words:"true"`
-	OutputFileName  string `yaml:"-"              split_words:"true"`
-	OperationID     int64  `yaml:"operationID"    split_words:"true"`
-	RecordingShell  string `yaml:"recordingShell" split_words:"true"`
-	APIURL          string `yaml:"apiURL"         split_words:"true" envconfig:"api_url"`
-	AccessKey       string `yaml:"accessKey"      split_words:"true"`
-	SecretKeyBase64 string `yaml:"secretKey"      split_words:"true" envconfig:"secret_key"`
-	SecretKey       []byte `yaml:"-"`
-	// OperationSlug   int     `yaml:"operationSlug" split_words:"true"`
-
-	issues []string
+// configHome corrects the xdg-equivalent config home directory from the OpenPeeDeeP/xdg library
+// for windows (it is arguably correct in other instances)
+func configHome() string {
+	if runtime.GOOS == "windows" {
+		return os.Getenv("LOCALAPPDATA")
+	}
+	return xdg.ConfigHome()
 }
 
-// Issues returns a list of encountered issues while parsing the config datasources
-func (t *TermRecorderConfig) Issues() []string {
-	return t.issues
+// ASHIRTConfigPath points to the configuration file used by the ASHIRT application
+func ASHIRTConfigPath() string {
+	return filepath.Join(configHome(), "ashirt", "config.json")
 }
 
-func generateStaticConfig() error {
-	dummyConfig := TermRecorderConfig{
-		ConfigVersion:  1,
-		RecordingShell: os.Getenv("SHELL"),
+// ATermConfigPath points to where the terminal recorder config is located
+func ATermConfigPath() string {
+	return filepath.Join(configHome(), "aterm", "config.yaml")
+}
+
+// ParseConfig returns the parsed configuration, based on built-in defaults, config file values,
+// system environment configuration, and CLI overrides, in that order. See ParseConfigNoOverrides
+// for a version with CLI overrides.
+func ParseConfig(overrides CLIOptions) error {
+	cfg, err := ParseConfigNoOverrides()
+
+	applyCLIOverrides(&cfg, overrides)
+
+	SetConfig(cfg)
+
+	return err
+}
+
+// ParseConfigNoOverrides returns the parsed configuration, based on built-in defaults,
+// config file values and system environment configuration, in that order.
+// Note that this parses and returns the configuration, rather than storing it for later use
+func ParseConfigNoOverrides() (TermRecorderConfig, error) {
+	cfg := TermRecorderConfigWithDefaults()
+
+	fileParseErr := parseConfigFile(&cfg)
+	envParseErr := cfg.parseEnv()
+
+	return cfg, errors.Append(fileParseErr, envParseErr)
+}
+
+func parseConfigFile(cfg *TermRecorderConfig) error {
+	f, err := os.Open(ATermConfigPath())
+	defer f.Close()
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ErrConfigFileDoesNotExist
+		}
+		return errors.Wrap(err, "Unable to read config file")
+	}
+	return cfg.parseFileContent(f)
+}
+
+// applyCLIOverrides provides a mechansim to alter the provided TermRecorderConfig for known CLIOptions
+// values.
+func applyCLIOverrides(cfg *TermRecorderConfig, overrides CLIOptions) {
+	if cfg == nil {
+		return
+	}
+	if overrides.OperationSlug != "" {
+		(*cfg).OperationSlug = overrides.OperationSlug
+	}
+	if overrides.RecordingShell != "" {
+		(*cfg).RecordingShell = overrides.RecordingShell
+	}
+}
+
+// ValidateLoadedConfig is shorthand for calling ValidateConfig(loadedConfig). i.e. it validates
+// the loaded configuration, rather than an arbitrary configuration
+func ValidateLoadedConfig() error {
+	return ValidateConfig(loadedConfig)
+}
+
+// ValidateConfig checks the provided configuration for issues. Current issues include:
+// * AccessKey is set
+// * SecretKey set and decodable
+// * APIURL parsable
+// Returns an error. This error is a go-multierror, and can indicate multiple errors. Errors can
+// be checked via errors.Is function
+func ValidateConfig(tConfig TermRecorderConfig) error {
+	validationErr := multierror.Append(nil)
+	validationErr.ErrorFormat = errors.MultiErrorPrintFormat
+
+	if tConfig.AccessKey == "" {
+		multierror.Append(validationErr, ErrAccessKeyNotSet)
 	}
 
+	if tConfig.SecretKey == "" {
+		multierror.Append(validationErr, ErrSecretKeyNotSet)
+	} else if err := network.SetSecretKey(tConfig.SecretKey); err != nil {
+		multierror.Append(validationErr, ErrSecretKeyMalformed)
+	}
+
+	if _, err := url.Parse(tConfig.APIURL); err != nil {
+		multierror.Append(validationErr, ErrAPIURLUnparsable)
+	}
+
+	return validationErr.ErrorOrNil()
+}
+
+type TermRecorderConfig struct {
+	ConfigVersion  int64  `yaml:"configVersion"`
+	APIURL         string `yaml:"apiURL"         split_words:"true" envconfig:"api_url"`
+	OutputDir      string `yaml:"outputDir"      split_words:"true"`
+	AccessKey      string `yaml:"accessKey"      split_words:"true"`
+	SecretKey      string `yaml:"secretKey"      split_words:"true" envconfig:"secret_key"`
+	OutputFileName string `yaml:"-"              split_words:"true"`
+	OperationSlug  string `yaml:"operationSlug"  split_words:"true"`
+	RecordingShell string `yaml:"recordingShell" split_words:"true"`
+}
+
+type TermRecorderConfigOverrides struct {
+	APIURL         *string `json:"apiURL"`
+	OutputDir      *string `json:"evidenceRepo"`
+	AccessKey      *string `json:"accessKey"`
+	SecretKey      *string `json:"secretKey"`
+	OutputFileName *string
+	OperationSlug  *string
+	RecordingShell *string
+}
+
+func CloneConfigAsOverrides(cfg TermRecorderConfig) TermRecorderConfigOverrides {
+	strPtr := func(s string) *string { return &s }
+	return TermRecorderConfigOverrides{
+		APIURL:         strPtr(cfg.APIURL),
+		OutputDir:      strPtr(cfg.OutputDir),
+		AccessKey:      strPtr(cfg.AccessKey),
+		SecretKey:      strPtr(cfg.SecretKey),
+		OutputFileName: strPtr(cfg.OutputFileName),
+		OperationSlug:  strPtr(cfg.OperationSlug),
+		RecordingShell: strPtr(cfg.RecordingShell),
+	}
+}
+
+func CloneLoadedConfigAsOverrides() TermRecorderConfigOverrides {
+	return CloneConfigAsOverrides(loadedConfig)
+}
+
+func (t *TermRecorderConfig) WriteConfigToFile(configFilePath string) error {
+	os.MkdirAll(path.Dir(configFilePath), 0755)
 	outFile, err := os.Create(configFilePath)
 	if err != nil {
 		return errors.Wrap(err, "Unable to create config file")
 	}
 	defer outFile.Close()
 
-	encoder := yaml.NewEncoder(outFile)
-	err = encoder.Encode(dummyConfig)
-	if err != nil {
+	if err = yaml.NewEncoder(outFile).Encode(t); err != nil {
 		return errors.Wrap(err, "Unable to write config file")
 	}
-	return errors.Wrap(outFile.Close(), "Could not close config file")
+	return errors.MaybeWrap(outFile.Close(), "Could not close config file")
 }
 
-// Parse actually reads the various data sources.
-func Parse() TermRecorderConfig {
-	config := TermRecorderConfig{
-		// defaults go here
-		issues:         make([]string, 0, 4),
-		RecordingShell: os.Getenv("SHELL"),
-	}
-	f, err := os.Open(configFilePath)
-	defer f.Close()
-	if err != nil {
-		if os.IsNotExist(err) { //is of type files does not exist {
-			if err = generateStaticConfig(); err != nil {
-				config.issues = append(config.issues, "Unable to generate new config: "+err.Error())
-			} else {
-				config.issues = append(config.issues, "Unable to find confile file. One has been created at: "+configFilePath)
-			}
-		} else {
-			config.issues = append(config.issues, "Unable to open up default config file path: "+err.Error())
-		}
-	} else {
-		config.parseFile(f)
-	}
-	config.parseEnv()
-	config.parseCli()
-
-	config.SecretKey, err = base64.StdEncoding.DecodeString(config.SecretKeyBase64)
-	if err != nil {
-		config.issues = append(config.issues, "Unable to decode SecretKey: "+err.Error())
-	}
-
-	return config
+func WriteConfig() error {
+	return loadedConfig.WriteConfigToFile(ATermConfigPath())
 }
 
-func (t *TermRecorderConfig) parseEnv() {
-	err := envconfig.Process("ASHIRT_TERM_RECORDER", t)
-	if err != nil {
-		t.issues = append(t.issues, "Error reading env config: "+err.Error())
-	}
-}
-
-func (t *TermRecorderConfig) parseFile(reader io.Reader) {
+func (t *TermRecorderConfig) parseFileContent(reader io.Reader) error {
 	bytes, err := ioutil.ReadAll(reader)
 	if err != nil {
-		t.issues = append(t.issues, "Unable to read config file from datasource: "+err.Error())
-		return
+		return errors.Wrap(err, "Unable to read config file")
 	}
 	err = yaml.Unmarshal(bytes, &t)
 	if err != nil {
-		t.issues = append(t.issues, "Unable to interpret datasource as a yaml file: "+err.Error())
+		return errors.Wrap(err, "Unable to interpret config file as YAML document")
 	}
+	return nil
 }
 
-func (t *TermRecorderConfig) parseCli() {
-	attachStringFlag("output-dir", "", "Location where output file will be stored", t.OutputDir, &t.OutputDir)
-	attachStringFlag("output-file", "o", "Name of the output file", t.OutputFileName, &t.OutputFileName)
-
-	attachIntFlag("operation", "", "Operation ID to use when saving evidence", t.OperationID, &t.OperationID)
-
-	attachStringFlag("shell", "s", "Name of the output file", t.RecordingShell, &t.RecordingShell)
-	attachStringFlag("svc", "", "Name of the output file", t.APIURL, &t.APIURL)
-
-	flag.Parse()
+func (t *TermRecorderConfig) parseEnv() error {
+	err := envconfig.Process("ASHIRT_TERM_RECORDER", t)
+	if err != nil {
+		return errors.Wrap(err, "Error reading env config")
+	}
+	return nil
 }
 
-// the below are small helpers to provide both short and long form flags -- not ideal, as it messes up
-// the -h flag.
-
-func attachStringFlag(longName, shortName, description, defaultValue string, variable *string) {
-	if shortName != "" {
-		flag.StringVar(variable, shortName, defaultValue, description)
-	}
-	flag.StringVar(variable, longName, defaultValue, description)
+func PrintLoadedConfig(w io.Writer) {
+	PrintConfigTo(loadedConfig, w)
 }
 
-func attachIntFlag(longName, shortName, description string, defaultValue int64, variable *int64) {
-	if shortName != "" {
-		flag.Int64Var(variable, shortName, defaultValue, description)
-	}
-	flag.Int64Var(variable, longName, defaultValue, description)
+// PrintConfigTo writes the provided configuration to the provided io.Writer.
+// This is optimized for human reading, rather than as a serialization format.
+// All errors that are encountered while writing are ignored.
+func PrintConfigTo(t TermRecorderConfig, w io.Writer) {
+	PrintConfigWithHeaderTo("Current Configuration", t, w)
 }
 
-func attachBoolFlag(longName, shortName, description string, defaultValue bool, variable *bool) {
-	if shortName != "" {
-		flag.BoolVar(variable, shortName, defaultValue, description)
-	}
-	flag.BoolVar(variable, longName, defaultValue, description)
+// PrintConfigWithHeaderTo writes the provided configuration to the provided io.Writer.
+// This is optimized for human reading, rather than as a serialization format.
+// All errors that are encountered while writing are ignored.
+func PrintConfigWithHeaderTo(header string, t TermRecorderConfig, w io.Writer) {
+	writeLine := func(s string) { w.Write([]byte(s + "\n\r")) }
+
+	writeLine("\r" + fancy.Clear)
+	writeLine(header + ":")
+	writeLine(fmt.Sprintf("\tConfig Version:  %v", t.ConfigVersion))
+	writeLine(fmt.Sprintf("\tAPI Host:        %v", t.APIURL))
+	writeLine(fmt.Sprintf("\tOutput Base:     %v", t.OutputDir))
+	writeLine(fmt.Sprintf("\tAccess Key:      %v", t.AccessKey))
+	writeLine(fmt.Sprintf("\tSecret Key:      %v", t.SecretKey))
+	writeLine(fmt.Sprintf("\tOutput Prefix:   %v", t.OutputFileName))
+	writeLine(fmt.Sprintf("\tOperation Slug:  %v", t.OperationSlug))
+	writeLine(fmt.Sprintf("\tRecording Shell: %v", t.RecordingShell))
 }
 
-func attachFloatFlag(longName, shortName, description string, defaultValue float64, variable *float64) {
-	if shortName != "" {
-		flag.Float64Var(variable, shortName, defaultValue, description)
+// TermRecorderConfigWithDefaults generates a TermRecorderConfig struct with some common default values
+func TermRecorderConfigWithDefaults() TermRecorderConfig {
+	return TermRecorderConfig{
+		ConfigVersion:  1,
+		RecordingShell: os.Getenv("SHELL"),
 	}
-	flag.Float64Var(variable, longName, defaultValue, description)
 }
