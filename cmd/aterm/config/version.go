@@ -12,7 +12,10 @@ var codeRepoRaw string
 var codeRepo string
 var codeOwner string
 
+// UnknownCodeRepo is the value represented by CodeRepo() when no repo is specified
 const UnknownCodeRepo = "???"
+
+// UnknownCodeOwner is the value represented by CodeOwner() when no repo is specified
 const UnknownCodeOwner = "???"
 
 var parsedVersionData *info.Data
@@ -59,10 +62,12 @@ func BuildDate() string {
 	return getData().BuildDate.Format(time.RFC3339)
 }
 
+// CodeRepo extracts the repository portion of the owner/repo build flag
 func CodeRepo() string {
 	return codeRepo
 }
 
+// CodeOwner extracts the owner portion of the owner/repo build flag
 func CodeOwner() string {
 	return codeOwner
 }
