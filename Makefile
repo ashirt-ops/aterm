@@ -3,7 +3,7 @@ include .env
 DEV_VERSION_FLAG=-X github.com/jrozner/go-info.version=v0.0.0-development
 DEV_COMMIT_FLAG=-X github.com/jrozner/go-info.commitHash=$(shell git rev-list -1 HEAD)
 DEV_DATE_FLAG=-X github.com/jrozner/go-info.buildDate=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
-DEV_REPO_FLAG=-X github.com/theparanoids/aterm/cmd/config.codeRepoRaw=theparanoids/aterm
+DEV_REPO_FLAG=-X github.com/theparanoids/aterm/cmd/aterm/config.codeRepoRaw=theparanoids/aterm
 LD_FLAGS=-ldflags "$(DEV_VERSION_FLAG) $(DEV_COMMIT_FLAG) $(DEV_DATE_FLAG) $(DEV_REPO_FLAG)"
 
 .env:
