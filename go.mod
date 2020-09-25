@@ -5,6 +5,8 @@ go 1.14
 require (
 	github.com/OpenPeeDeeP/xdg v1.0.0
 	github.com/creack/pty v1.1.11
+	github.com/google/go-github v17.0.0+incompatible
+	github.com/google/go-github/v32 v32.1.0
 	github.com/hashicorp/go-multierror v1.1.0
 	github.com/jonboulle/clockwork v0.1.0
 	github.com/jrozner/go-info v0.0.0-20200923180815-246aef93e85e

@@ -55,6 +55,8 @@ func main() {
 		opts.ShowMenu = true
 	}
 
+	appdialogs.NotifyUpdate(config.Version(), config.CodeOwner(), config.CodeRepo())
+
 	// Check CLI flags
 	if opts.PrintConfig {
 		config.PrintLoadedConfig(os.Stdout)
