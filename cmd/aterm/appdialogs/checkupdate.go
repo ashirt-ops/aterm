@@ -20,7 +20,7 @@ func NotifyUpdate(currentVersion, owner, repo string) {
 
 	res, err := network.CheckVersion(owner, repo, currentSemVer)
 	if err != nil {
-		printline("Unable to check for updates", err)
+		printline("Unable to check for updates", err.Error())
 	} else if res.HasUpgrade() {
 		printline(fancy.AsBold("There is an update available."))
 		if res.MajorUpgrade != nil {
