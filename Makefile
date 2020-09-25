@@ -59,6 +59,10 @@ run:
 run-menu:
 	go run $(LD_FLAGS) cmd/aterm/*.go -menu
 
+.PHONY: run-version
+run-version:
+	go run $(LD_FLAGS) cmd/aterm/*.go -version
+
 .PHONY: run-reset-hard
 run-reset-hard:
 	go run $(LD_FLAGS) cmd/aterm/*.go -reset-hard

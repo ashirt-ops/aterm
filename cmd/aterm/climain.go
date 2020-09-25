@@ -11,6 +11,8 @@ import (
 	"github.com/theparanoids/aterm/cmd/aterm/recording"
 	"github.com/theparanoids/aterm/errors"
 	"github.com/theparanoids/aterm/network"
+
+	"github.com/jrozner/go-info"
 )
 
 func main() {
@@ -18,6 +20,11 @@ func main() {
 	opts := config.ParseCLI()
 
 	appdialogs.PrintVersion()
+
+	if info.Flag() {
+		return // exit if they ask to print the version
+	}
+
 	// Parse env/config file for base values
 	var err error
 	if opts.HardReset {
