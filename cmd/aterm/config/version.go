@@ -64,16 +64,19 @@ func BuildDate() string {
 
 // CodeRepo extracts the repository portion of the owner/repo build flag
 func CodeRepo() string {
-	return codeRepo
+	_, repo := parseCodeRepoRaw()
+	return repo
 }
 
 // CodeOwner extracts the owner portion of the owner/repo build flag
 func CodeOwner() string {
-	return codeOwner
+	owner, _ := parseCodeRepoRaw()
+	return owner
+
 }
 
 // returns a tuple of (owner, repo).
-func parseCodeOwner() (string, string) {
+func parseCodeRepoRaw() (string, string) {
 	if codeRepo == "" {
 		matches := ownerRepoRegex.FindStringSubmatch(codeRepoRaw)
 		if matches != nil {
