@@ -14,6 +14,7 @@ type CLIOptions struct {
 	PrintConfig          bool
 	ForceFirstRun        bool
 	HardReset            bool
+	PrintVersion         bool
 }
 
 // ParseCLI parses all (supported) arguments from the command line and stores them in a CLIOptions
@@ -27,7 +28,7 @@ func ParseCLI() CLIOptions {
 	attachBoolFlag("print-config", "pc", "Print current configuration (post-command line arguments), then exits", false, &opts.PrintConfig)
 	attachBoolFlag("reset", "", "Rerun first run to set up initial values", false, &opts.ForceFirstRun)
 	attachBoolFlag("reset-hard", "", "Ignore the config file and rerun first run", false, &opts.HardReset)
-
+	attachBoolFlag("v", "", "output the software version and build information", false, &opts.PrintVersion)
 	flag.Parse()
 	return opts
 }

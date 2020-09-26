@@ -21,7 +21,8 @@ func main() {
 
 	appdialogs.PrintVersion()
 
-	if info.Flag() {
+	if info.Flag() || opts.PrintVersion {
+		appdialogs.PrintExtendedVersion()
 		return // exit if they ask to print the version
 	}
 

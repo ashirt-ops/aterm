@@ -67,6 +67,10 @@ run-version:
 run-reset-hard:
 	go run $(LD_FLAGS) cmd/aterm/*.go -reset-hard
 
+.PHONY: run-help
+run-help:
+	go run $(LD_FLAGS) cmd/aterm/*.go -h
+
 .PHONY: debug
 debug:
 	go run $(LD_FLAGS) cmd/aterm/*.go 2>debug.log
