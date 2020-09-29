@@ -151,7 +151,7 @@ func editConfig(runningConfig config.TermRecorderConfig) config.TermRecorderConf
 	stop := false
 	for _, question := range questions {
 		if !stop {
-			question.AssignTo = askFor(question.Fields, question.DefaultVal, func() { stop = true }).Value
+			*question.AssignTo = *askFor(question.Fields, question.DefaultVal, func() { stop = true }).Value
 		}
 	}
 	if !stop {
@@ -171,7 +171,7 @@ func editConfig(runningConfig config.TermRecorderConfig) config.TermRecorderConf
 
 	newCfg := config.PreviewUpdatedInstanceConfig(runningConfig, overrideCfg)
 
-	config.PrintConfigTo(newCfg, os.Stdout)
+	config.PrintConfigTo(newCfg, medium)
 	err := config.ValidateConfig(newCfg)
 	if err != nil {
 		ShowInvalidConfigMessageNoHelp(err)
