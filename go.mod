@@ -11,7 +11,7 @@ require (
 	github.com/jonboulle/clockwork v0.1.0
 	github.com/jrozner/go-info v0.0.0-20200923180815-246aef93e85e
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/manifoldco/promptui v0.7.0
+	github.com/manifoldco/promptui v0.8.0
 	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-isatty v0.0.10 // indirect
 	github.com/stretchr/testify v1.4.0
