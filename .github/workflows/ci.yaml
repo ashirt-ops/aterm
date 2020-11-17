@@ -35,7 +35,7 @@ jobs:
 
     steps:
     - name: Set artifact name
-      run: echo "::set-env name=name::aterm-${{ needs.store-sha8.outputs.sha8 }}-$(uname -s | tr '[:upper:]' '[:lower:]')"
+      run: echo "aterm-${{ needs.store-sha8.outputs.sha8 }}-$(uname -s | tr '[:upper:]' '[:lower:]')" >> $name
 
     - name: Set up Go 1.x
       uses: actions/setup-go@v2
@@ -117,7 +117,7 @@ jobs:
         platform: [darwin, linux]
     steps:
       - name: Set Version
-        run: echo "::set-env name=version::$(echo ${{ github.ref }} | cut -d'/' -f3 | cut -c2-)"
+        run: echo "$(echo ${{ github.ref }} | cut -d'/' -f3 | cut -c2-)" >> $version
       - name: Download Previous Artifacts
         uses: actions/download-artifact@v2
         with:
