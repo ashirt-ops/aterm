@@ -19,7 +19,7 @@ func GetTags(operationSlug string) ([]dtos.Tag, error) {
 
 	resp, err := makeJSONRequest("GET", apiURL+"/operations/"+operationSlug+"/tags", http.NoBody)
 	if err != nil {
-		return tags, errors.Append(err, ErrCannotConnect)
+		return tags, errors.Append(err, errors.ErrCannotConnect)
 	}
 
 	if err = evaluateResponseStatusCode(resp.StatusCode); err != nil {
@@ -46,7 +46,7 @@ func CreateTag(operationSlug, name, colorName string) (*dtos.Tag, error) {
 	resp, err := makeJSONRequest("POST", apiURL+"/operations/"+operationSlug+"/tags", bytes.NewReader(content))
 
 	if err != nil {
-		return nil, errors.Append(err, ErrCannotConnect)
+		return nil, errors.Append(err, errors.ErrCannotConnect)
 	}
 
 	if err = evaluateResponseStatusCode(resp.StatusCode); err != nil {

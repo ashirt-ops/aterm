@@ -1,17 +1,12 @@
 package network
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/theparanoids/ashirt-server/backend/dtos"
+	"github.com/theparanoids/aterm/errors"
 )
-
-var ErrConnectionUnauthorized = errors.New("Could not connect: Unauthorized")
-var ErrConnectionNotFound = errors.New("Could not connect: Not Found")
-var ErrConnectionUnknownStatus = errors.New("Could not connect: Unknown status")
-var ErrOutOfDateServer = errors.New("Could not connect: Invalid or out of date server")
 
 // TestConnection performs a basic query to the backend and interprets the results.
 // There are a few scenarios. A successful connection returns ("", nil)
@@ -28,15 +23,15 @@ func TestConnection() (string, error) {
 	if statusCode == http.StatusOK {
 		var cc dtos.CheckConnection
 		if err = readResponseBody(&cc, resp.Body); err != nil || cc.Ok == false {
-			return "Check API URL", ErrOutOfDateServer
+			return "Check API URL", errors.ErrOutOfDateServer
 		}
 
 		return "", nil
 	} else if statusCode == http.StatusUnauthorized {
-		return "Check API and Secret keys", ErrConnectionUnauthorized
+		return "Check API and Secret keys", errors.ErrConnectionUnauthorized
 	} else if statusCode == http.StatusNotFound {
-		return "Check API URL", ErrConnectionNotFound
+		return "Check API URL", errors.ErrConnectionNotFound
 	} else {
-		return "", fmt.Errorf("%w : Status Code: %v", ErrConnectionUnknownStatus, statusCode)
+		return "", fmt.Errorf("%w : Status Code: %v", errors.ErrConnectionUnknownStatus, statusCode)
 	}
 }

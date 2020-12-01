@@ -24,8 +24,6 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
-var ErrNotInitialized = errors.New("Recordings have not been initialized")
-
 // RecordingInput is a small structure for holding all configuration details for starting up
 // a recording.
 //
@@ -73,7 +71,7 @@ func InitializeRecordings() {
 // StartRecording takes control of the terminal and starts a subshell to record input.
 func StartRecording(opSlug string) (RecordingOutput, error) {
 	if recConfig.ptyReader == nil {
-		return RecordingOutput{}, ErrNotInitialized
+		return RecordingOutput{}, errors.ErrNotInitialized
 	}
 
 	recOpts := RecordingInput{

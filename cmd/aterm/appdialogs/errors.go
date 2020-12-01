@@ -4,15 +4,10 @@
 package appdialogs
 
 import (
-	"errors"
-	"fmt"
-
 	"github.com/theparanoids/aterm/cmd/aterm/config"
+	"github.com/theparanoids/aterm/errors"
 	"github.com/theparanoids/aterm/fancy"
 )
-
-var ErrCancelled = fmt.Errorf("Cancelled")
-var ErrAlreadyExists = fmt.Errorf("Already Exists")
 
 // ShowInvalidConfigurationMessage renders user-messaging when a validation error occurs.
 // To actually validate the config, see config.ValidateConfig/ValidateLoadedConfig
@@ -38,19 +33,19 @@ func ShowInvalidConfigMessageNoHelp(validationErr error) bool {
 	hasAccessIssue := false
 
 	printline("I detected problems with this configuration:")
-	if errors.Is(validationErr, config.ErrAccessKeyNotSet) {
+	if errors.Is(validationErr, errors.ErrAccessKeyNotSet) {
 		printline(" * Access Key has not been set")
 		hasAccessIssue = true
 	}
-	if errors.Is(validationErr, config.ErrSecretKeyNotSet) {
+	if errors.Is(validationErr, errors.ErrSecretKeyNotSet) {
 		printline(" * Secret Key has not been set")
 		hasAccessIssue = true
 	}
-	if errors.Is(validationErr, config.ErrSecretKeyMalformed) {
+	if errors.Is(validationErr, errors.ErrSecretKeyMalformed) {
 		printline(" * Secret Key is invalid")
 		hasAccessIssue = true
 	}
-	if errors.Is(validationErr, config.ErrAPIURLUnparsable) {
+	if errors.Is(validationErr, errors.ErrAPIURLUnparsable) {
 		printline(" * API URL is invalid")
 	}
 	printline()

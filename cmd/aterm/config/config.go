@@ -69,7 +69,7 @@ func parseConfigFile(cfg *TermRecorderConfig) error {
 	defer f.Close()
 	if err != nil {
 		if os.IsNotExist(err) {
-			return ErrConfigFileDoesNotExist
+			return errors.ErrConfigFileDoesNotExist
 		}
 		return errors.Wrap(err, "Unable to read config file")
 	}
@@ -107,17 +107,17 @@ func ValidateConfig(tConfig TermRecorderConfig) error {
 	validationErr.ErrorFormat = errors.MultiErrorPrintFormat
 
 	if tConfig.AccessKey == "" {
-		multierror.Append(validationErr, ErrAccessKeyNotSet)
+		multierror.Append(validationErr, errors.ErrAccessKeyNotSet)
 	}
 
 	if tConfig.SecretKey == "" {
-		multierror.Append(validationErr, ErrSecretKeyNotSet)
+		multierror.Append(validationErr, errors.ErrSecretKeyNotSet)
 	} else if err := network.SetSecretKey(tConfig.SecretKey); err != nil {
-		multierror.Append(validationErr, ErrSecretKeyMalformed)
+		multierror.Append(validationErr, errors.ErrSecretKeyMalformed)
 	}
 
 	if _, err := url.Parse(tConfig.APIURL); err != nil {
-		multierror.Append(validationErr, ErrAPIURLUnparsable)
+		multierror.Append(validationErr, errors.ErrAPIURLUnparsable)
 	}
 
 	return validationErr.ErrorOrNil()

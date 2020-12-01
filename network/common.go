@@ -73,7 +73,7 @@ func evaluateResponseStatusCode(code int) error {
 		return fmt.Errorf("Server encountered an error")
 	}
 	if code != http.StatusOK && code != http.StatusCreated {
-		return ErrCannotConnect
+		return errors.ErrCannotConnect
 	}
 	return nil
 }

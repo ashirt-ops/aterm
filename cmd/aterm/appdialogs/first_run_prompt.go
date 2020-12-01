@@ -62,7 +62,7 @@ func FirstRun(primaryConfigFile, pathToCommonConfig string) (config.TermRecorder
 		if testErr == nil {
 			printf("These configurations work.\n")
 			checkConnection = false
-		} else if errors.Is(testErr, network.ErrConnectionNotFound) {
+		} else if errors.Is(testErr, errors.ErrConnectionNotFound) {
 			printf("It looks like the server is not available or the address is wrong.\n")
 			fix, err := dialog.YesNoPrompt("Do you want to try to fix this?", "", medium)
 			if fix && err == nil {
@@ -70,7 +70,7 @@ func FirstRun(primaryConfigFile, pathToCommonConfig string) (config.TermRecorder
 			} else {
 				checkConnection = false
 			}
-		} else if errors.Is(testErr, network.ErrConnectionUnauthorized) {
+		} else if errors.Is(testErr, errors.ErrConnectionUnauthorized) {
 			printf("The server did not accept your access and secret key.\n")
 			fix, err := dialog.YesNoPrompt("Do you want to try to fix this?", "", medium)
 			if fix && err == nil {

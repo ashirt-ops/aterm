@@ -230,9 +230,9 @@ func askForTags(operationSlug string, allTags []dtos.Tag, selectedTagIDs []int64
 		} else if selection == createOpt {
 			newTag, err := askForNewTag(operationSlug, allTags)
 			if err != nil {
-				if err == ErrCancelled {
+				if err == errors.ErrCancelled {
 					printline("Tag creation cancelled")
-				} else if err == ErrAlreadyExists {
+				} else if err == errors.ErrAlreadyExists {
 					toggleValue(&selectedTagIDs, newTag.ID)
 				} else {
 					printfln("Unable to create tag. Error: %v", err.Error())
@@ -272,12 +272,12 @@ func askForNewTag(operationSlug string, allTags []dtos.Tag) (*dtos.Tag, error) {
 
 	for _, t := range allTags {
 		if lowerName == strings.ToLower(t.Name) {
-			return &t, ErrAlreadyExists
+			return &t, errors.ErrAlreadyExists
 		}
 	}
 
 	if name == "" {
-		return nil, ErrCancelled
+		return nil, errors.ErrCancelled
 	}
 	return network.CreateTag(operationSlug, name, network.RandomTagColor())
 }
