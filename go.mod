@@ -16,5 +16,5 @@ require (
 	github.com/stretchr/testify v1.6.1
 	github.com/theparanoids/ashirt-server v0.0.0-20200922024650-e7b93c90eb90
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
-	gopkg.in/yaml.v2 v2.3.0
+	gopkg.in/yaml.v2 v2.4.0
 )
