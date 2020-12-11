@@ -22,7 +22,7 @@ func askForServer() {
 
 	if selection == createOpt {
 		newServer, err := createServerDialog(common.NoServer, false)
-		if err != nil {
+		if err == nil {
 			config.SetActiveServer(newServer.ServerUUID)
 		}
 	} else {
@@ -51,7 +51,7 @@ func createServerDialog(modelServer common.Server, withPreamble bool) (common.Se
 
 	saveOpt := dialog.SimpleOption{Label: "Save"}
 	editOpt := dialog.SimpleOption{Label: "Make Changes"}
-	testOpt := dialog.SimpleOption{Label: "Test"}
+	testOpt := dialog.SimpleOption{Label: "Test & Save"}
 	cancelOpt := dialog.SimpleOption{Label: "Cancel"}
 	finishedOptions := []dialog.SimpleOption{saveOpt, editOpt, testOpt, cancelOpt}
 
