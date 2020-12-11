@@ -11,9 +11,9 @@ var ErrCancelled = fmt.Errorf("Cancelled")
 // specifically, this is used with Tags
 var ErrAlreadyExists = fmt.Errorf("Already Exists")
 
-// ErrConfigFileDoesNotExist is the error returned when the config file cannot be found at the
+// ErrFileDoesNotExist is the error returned when a file cannot be found at the
 // time of (attempted) parsing
-var ErrConfigFileDoesNotExist = fmt.Errorf("Config file does not exist")
+var ErrFileDoesNotExist = fmt.Errorf("File does not exist")
 
 // ErrAccessKeyNotSet is the error returned when the provided access key is blank
 var ErrAccessKeyNotSet = fmt.Errorf("Access Key has not been specified")
@@ -47,3 +47,16 @@ var ErrOutOfDateServer = fmt.Errorf("Could not connect: Invalid or out of date s
 // ErrNotInitialized reflects the situation that a pty recording was requsted, but the pty was not
 // ready
 var ErrNotInitialized = fmt.Errorf("Recordings have not been initialized")
+
+// ErrServerNotFound is  TODO
+var ErrServerNotFound = fmt.Errorf("Server entry does not exist")
+
+// ErrInvalidServer is returned when a given common.Server has invalid data (specifically, if it is
+// equivalent to common.NoServer)
+var ErrInvalidServer = fmt.Errorf("Server is not valid")
+
+// ErrUnknownConfigFormat TODO
+var ErrUnknownConfigFormat = fmt.Errorf("Unable to interpret config file")
+
+// ErrUnknownConfigVersion TOOD
+var ErrUnknownConfigVersion = fmt.Errorf("Unknown config file version")
