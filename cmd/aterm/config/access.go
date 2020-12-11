@@ -62,7 +62,6 @@ func Ready() error {
 }
 
 func upgrade() {
-	// update config
 	switch CurrentConfig().GetConfigVersion() {
 	case 1:
 		cfgv1 := GetConfigV1()
@@ -77,6 +76,7 @@ func upgrade() {
 		server.SecretKey = cfgv1.GetSecretKey()
 		server.HostPath = cfgv1.GetHostPath()
 		UpsertServer(server)
+		SetActiveServer(common.DefaultServerUUID)
 		SetServer(common.DefaultServerUUID)
 		// change cfgv1 into a ConfigV2
 		cfgv2 := newConfigV2()
