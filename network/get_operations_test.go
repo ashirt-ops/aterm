@@ -18,7 +18,7 @@ func TestGetOperations(t *testing.T) {
 	op2Raw := `{"slug": "s2", "name": "Jill", "numUsers": 2048, "status": 2, "id": 10}`
 	resp := "[" + op1Raw + "," + op2Raw + "]"
 	makeServer(Route{"GET", "/api/operations", newCannedResponse(200, resp)})
-	network.SetBaseURL("http://localhost" + testPort)
+	network.SetServer(network.MkTestServer(testPort))
 
 	ops, err := network.GetOperations()
 	var op1, op2 dtos.Operation

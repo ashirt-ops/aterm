@@ -29,7 +29,7 @@ func TestUpload(t *testing.T) {
 	}
 
 	makeServer(Route{"POST", "/api/operations/first/evidence", newRequestRecorder(201, `{"uuid": "0000", "description": "`+uploadInput.Description+`", "occurredAt": "`+Now()+`"}`, &written)})
-	network.SetBaseURL("http://localhost" + testPort)
+	network.SetServer(network.MkTestServer(testPort))
 
 	_, err := network.UploadToAshirt(uploadInput)
 
@@ -40,7 +40,7 @@ func TestUploadFailedWithJSONError(t *testing.T) {
 	t.Skip("skipping network tests")
 	var written []byte
 	makeServer(Route{"POST", "/api/operations/second/evidence", newRequestRecorder(402, `{"error": "oops"}`, &written)})
-	network.SetBaseURL("http://localhost" + testPort)
+	network.SetServer(network.MkTestServer(testPort))
 
 	uploadInput := network.UploadInput{
 		OperationSlug: "second",
@@ -58,7 +58,7 @@ func TestUploadFailedWithUnknownJSON(t *testing.T) {
 	t.Skip("skipping network tests")
 	var written []byte
 	makeServer(Route{"POST", "/api/operations/third/evidence", newRequestRecorder(402, `{"something": "value"}`, &written)})
-	network.SetBaseURL("http://localhost" + testPort)
+	network.SetServer(network.MkTestServer(testPort))
 
 	uploadInput := network.UploadInput{
 		OperationSlug: "third",
