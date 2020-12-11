@@ -4,7 +4,6 @@ import (
 	"os"
 
 	"github.com/theparanoids/aterm/fancy"
-
 	"github.com/theparanoids/aterm/network"
 )
 

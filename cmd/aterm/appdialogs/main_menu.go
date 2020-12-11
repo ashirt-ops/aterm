@@ -1,8 +1,6 @@
 package appdialogs
 
 import (
-	"os"
-
 	"github.com/theparanoids/ashirt-server/backend/dtos"
 	"github.com/theparanoids/aterm/cmd/aterm/config"
 	"github.com/theparanoids/aterm/cmd/aterm/recording"
@@ -16,11 +14,13 @@ func renderMainMenu(state MenuState) MenuState {
 	menuOptions := []dialog.SimpleOption{
 		dialogOptionStartRecording,
 		dialogOptionUpdateOps,
+		dialogOptionChangeServer,
 		dialogOptionTestConnection,
 		dialogOptionEditRunningConfig,
 		dialogOptionExit,
 	}
 
+	printline("Current Server: " + fancy.WithPizzazz(config.GetCurrentServer().GetServerName(), fancy.Bold|fancy.Blue))
 	resp := HandlePlainSelect("What do you want to do", menuOptions, func() dialog.SimpleOption {
 		printline("Exiting...")
 		return dialogOptionExit
@@ -35,6 +35,10 @@ func renderMainMenu(state MenuState) MenuState {
 	case dialogOptionTestConnection == resp.Selection:
 		testConnection()
 
+	case dialogOptionChangeServer == resp.Selection:
+		askForServer()
+		SignalCurrentServerUpdate()
+
 	case dialogOptionUpdateOps == resp.Selection:
 		newOps, err := updateOperations()
 		if err != nil {
@@ -44,7 +48,7 @@ func renderMainMenu(state MenuState) MenuState {
 		}
 
 	case dialogOptionEditRunningConfig == resp.Selection:
-		newConfig := editConfig(state.InstanceConfig)
+		newConfig := editConfig()
 		rtnState.InstanceConfig = newConfig
 	default:
 		printline("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
@@ -63,17 +67,21 @@ func startNewRecording(state MenuState) MenuState {
 		return rtnState
 	}
 
-	resp := askForOperationSlug(state.AvailableOperations, state.InstanceConfig.OperationSlug)
+	resp := askForOperationSlug(state.AvailableOperations, config.LastOperation())
+
+	if resp.IsKillSignal() {
+		return state
+	}
 
 	recordedMetadata := RecordingMetadata{
 		OperationSlug: unwrapOpSlug(resp),
 	}
-	// rtnState.InstanceConfig.OperationSlug = opSlug
 
 	// reuse last tags, if they match the operation
-	if recordedMetadata.OperationSlug == state.RecordedMetadata.OperationSlug {
+	if recordedMetadata.OperationSlug == config.LastOperation() {
 		recordedMetadata.SelectedTags = state.RecordedMetadata.SelectedTags
 	} else {
+		config.SetLastUsedOperation(recordedMetadata.OperationSlug)
 		recordedMetadata.SelectedTags = []dtos.Tag{}
 	}
 
@@ -129,60 +137,40 @@ func updateOperations() ([]dtos.Operation, error) {
 	return ops, nil
 }
 
-func editConfig(runningConfig config.TermRecorderConfig) config.TermRecorderConfig {
-	rtnConfig := runningConfig
-	overrideCfg := config.CloneConfigAsOverrides(runningConfig)
-
-	// iterate through each question. After each, check if the user backed out via ^d/^c, and if so, stop asking questions and leave the function
-	type FillQuestion struct {
-		Fields     AskForTemplateFields
-		DefaultVal *string
-		AssignTo   *string
-	}
-	questions := []FillQuestion{
-		FillQuestion{AssignTo: overrideCfg.AccessKey, Fields: accessKeyFields, DefaultVal: overrideCfg.AccessKey},
-		FillQuestion{AssignTo: overrideCfg.SecretKey, Fields: secretKeyFields, DefaultVal: overrideCfg.SecretKey},
-		FillQuestion{AssignTo: overrideCfg.APIURL, Fields: apiURLFields, DefaultVal: overrideCfg.APIURL},
-
-		FillQuestion{AssignTo: overrideCfg.RecordingShell, Fields: shellFields, DefaultVal: thisOrThat(overrideCfg.RecordingShell, os.Getenv("SHELL"))},
-		FillQuestion{AssignTo: overrideCfg.OutputDir, Fields: savePathFields, DefaultVal: overrideCfg.OutputDir},
-	}
+func editConfig() config.Config {
+	overrideCfg := config.CloneConfig()
 
 	stop := false
-	for _, question := range questions {
-		if !stop {
-			*question.AssignTo = *askFor(question.Fields, question.DefaultVal, func() { stop = true }).Value
+	backout := func() { stop = true }
+	ask := func(fields AskForTemplateFields, defVal string, saveFunc func(resp dialog.QueryResponse)) {
+		if stop {
+			return
 		}
-	}
-	if !stop {
-		resp := askForOperationSlug(internalMenuState.AvailableOperations, runningConfig.OperationSlug)
-		if resp.IsKillSignal() {
-			stop = true
-		} else {
-			slug := unwrapOpSlug(resp)
-			overrideCfg.OperationSlug = &slug
-		}
+		result := askFor(fields, &defVal, backout)
+		saveFunc(result)
 	}
 
+	ask(shellFields, overrideCfg.RecordingShell, func(q dialog.QueryResponse) {
+		if !q.IsKillSignal() && q.Value != nil {
+			overrideCfg.RecordingShell = *q.Value
+		}
+	})
+	ask(shellFields, overrideCfg.OutputDir, func(resp dialog.QueryResponse) {
+		overrideCfg.OutputDir = realize(resp.Value)
+	})
 	if stop {
 		printline("Discarding changes...")
-		return rtnConfig
+		return config.CurrentConfig()
 	}
 
-	newCfg := config.PreviewUpdatedInstanceConfig(runningConfig, overrideCfg)
-
+	newCfg := config.CurrentConfig().PreviewConfigUpdates(overrideCfg)
 	config.PrintConfigTo(newCfg, medium)
-	err := config.ValidateConfig(newCfg)
-	if err != nil {
-		ShowInvalidConfigMessageNoHelp(err)
-	}
-	yesPermanently := dialog.SimpleOption{Label: "Yes, and save for next time"}
-	yesTemporarily := dialog.SimpleOption{Label: "Yes, for now"}
+
+	yesPermanently := dialog.SimpleOption{Label: "Yes"}
 	cancelSave := dialog.SimpleOption{Label: "Cancel"}
 
 	saveChangesOptions := []dialog.SimpleOption{
 		yesPermanently,
-		yesTemporarily,
 		cancelSave,
 	}
 	resp := HandlePlainSelect("Do you want to save these changes", saveChangesOptions, func() dialog.SimpleOption {
@@ -193,15 +181,10 @@ func editConfig(runningConfig config.TermRecorderConfig) config.TermRecorderConf
 	switch {
 	case yesPermanently == resp.Selection:
 		config.SetConfig(newCfg)
-		if err := config.WriteConfig(); err != nil {
+		if err := config.SaveConfig(); err != nil {
 			ShowUnableToSaveConfigErrorMessage(err)
 		}
-		fallthrough
-	case yesTemporarily == resp.Selection:
-		network.SetAccessKey(newCfg.AccessKey)
-		network.SetSecretKey(newCfg.SecretKey)
-		network.SetBaseURL(newCfg.APIURL)
-		rtnConfig = newCfg
+		return newCfg
 
 	case cancelSave == resp.Selection:
 		break
@@ -210,7 +193,7 @@ func editConfig(runningConfig config.TermRecorderConfig) config.TermRecorderConf
 		printline("Hmm, I don't know how to handle that request. This is probably a bug. Could you please report this?")
 	}
 
-	return rtnConfig
+	return config.CurrentConfig()
 }
 
 func unwrapOpSlug(selectOpResp dialog.SelectResponse) string {

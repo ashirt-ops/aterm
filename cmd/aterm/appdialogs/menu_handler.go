@@ -2,6 +2,7 @@ package appdialogs
 
 import (
 	"github.com/theparanoids/ashirt-server/backend/dtos"
+	"github.com/theparanoids/aterm/cmd/aterm/config"
 	"github.com/theparanoids/aterm/dialog"
 	"github.com/theparanoids/aterm/fancy"
 )
@@ -27,6 +28,7 @@ var (
 	dialogOptionUpdateOps         = dialog.SimpleOption{Label: "Refresh Operations"}
 	dialogOptionStartRecording    = dialog.SimpleOption{Label: "Start a New Recording"}
 	dialogOptionEditRunningConfig = dialog.SimpleOption{Label: "Update Settings"}
+	dialogOptionChangeServer      = dialog.SimpleOption{Label: "Switch Servers"}
 
 	// upload menu options
 	dialogOptionJumpToMainMenu   = dialog.SimpleOption{Label: "Return to Main Menu"}
@@ -44,7 +46,7 @@ func StartMenus(initialState MenuState) {
 		printline(fancy.Caution("Unable to get operations", err))
 
 		// if we've previously recorded, assume the current op is still available
-		if defaultSlug := initialState.InstanceConfig.OperationSlug; defaultSlug != "" {
+		if defaultSlug := config.LastOperation(); defaultSlug != "" {
 			internalMenuState.AvailableOperations = []dtos.Operation{
 				dtos.Operation{
 					Slug: defaultSlug,

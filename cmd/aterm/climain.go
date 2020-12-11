@@ -9,59 +9,47 @@ import (
 	"github.com/theparanoids/aterm/cmd/aterm/appdialogs"
 	"github.com/theparanoids/aterm/cmd/aterm/config"
 	"github.com/theparanoids/aterm/cmd/aterm/recording"
-	"github.com/theparanoids/aterm/errors"
-	"github.com/theparanoids/aterm/network"
 
 	"github.com/jrozner/go-info"
 )
 
 func main() {
-	// Parse CLI for overrides
-	opts := config.ParseCLI()
-
 	appdialogs.PrintVersion()
+	err := config.Ready()
 
-	if info.Flag() || opts.PrintVersion {
+	printConfig := config.GetCLI().PrintConfig
+	showMenu := config.GetCLI().ShowMenu
+
+	if info.Flag() || config.GetCLI().PrintVersion {
 		appdialogs.PrintExtendedVersion()
-		return // exit if they ask to print the version
+		return
 	}
 
-	// Parse env/config file for base values
-	var err error
-	if opts.HardReset {
-		// intentionally ignoring parsing the config file here
-		opts.ForceFirstRun = true // force the creation of a new config file
-	} else {
-		err = config.ParseConfig(opts)
-	}
-
-	// Check if first run to set up configuration
-	if errors.Is(err, errors.ErrConfigFileDoesNotExist) || opts.ForceFirstRun {
-		configData, _ := appdialogs.FirstRun(config.ATermConfigPath(), config.ASHIRTConfigPath())
-		config.SetConfig(config.PreviewUpdatedInstanceConfig(config.TermRecorderConfigWithDefaults(), configData))
-		if err := config.WriteConfig(); err != nil {
-			appdialogs.ShowUnableToSaveConfigErrorMessage(err)
-		}
+	if config.IsNew() || config.GetCLI().ForceFirstRun {
+		doFirstRun()
 	} else if err != nil {
 		appdialogs.ShowConfigurationParsingErrorMessage(err)
-		opts.PrintConfig = true
+		printConfig = true
 	}
 
-	network.SetBaseURL(config.APIURL())
-	network.SetAccessKey(config.AccessKey())
+	config.SetServer(config.ActiveServerUUID())
 
-	validationErr := config.ValidateLoadedConfig()
-	if validationErr != nil {
-		appdialogs.ShowInvalidConfigurationMessage(validationErr)
-		opts.ShowMenu = true
+	if s := config.GetCurrentServer(); s.IsValidServer() {
+		validationErr := s.ValidateServerConfig()
+		if validationErr != nil {
+			appdialogs.ShowInvalidConfigurationMessage(validationErr)
+			showMenu = true
+		} else {
+			appdialogs.SignalCurrentServerUpdate()
+		}
 	}
 
 	appdialogs.NotifyUpdate(config.Version(), config.CodeOwner(), config.CodeRepo())
 
-	// Check CLI flags
-	if opts.PrintConfig {
+	// Check CLI-derived flags
+	if printConfig {
 		config.PrintLoadedConfig(os.Stdout)
-		return
+		os.Exit(-1)
 	}
 
 	recording.InitializeRecordings()
@@ -70,11 +58,17 @@ func main() {
 		InstanceConfig: config.CurrentConfig(),
 	}
 
-	if opts.ShowMenu {
+	if showMenu {
 		menuState.CurrentView = appdialogs.MenuViewMainMenu
 	} else {
 		menuState.CurrentView = appdialogs.MenuViewRecording
 	}
 	appdialogs.StartMenus(menuState)
+}
 
+func doFirstRun() {
+	err := appdialogs.FirstRun(config.ATermConfigPath(), config.ASHIRTConfigPath())
+	if err != nil {
+		appdialogs.ShowFirstRunErrorMessage(err)
+	}
 }

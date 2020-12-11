@@ -4,25 +4,32 @@ import (
 	"flag"
 )
 
+var parsedCLI CLIOptions
+
 // CLIOptions wraps the values that can be retrieved from the command line.
 // Note that no-values are actually represented as zero-value
 type CLIOptions struct {
-	OutputFileNamePrefix string
-	OperationSlug        string
-	RecordingShell       string
-	ShowMenu             bool
-	PrintConfig          bool
-	ForceFirstRun        bool
-	HardReset            bool
-	PrintVersion         bool
+	// Loaded is a simple check to see if the CLIOptions was loaded. if it was loaded, then this value will be true
+	Loaded         bool
+	RecordingShell string
+	ShowMenu       bool
+	PrintConfig    bool
+	ForceFirstRun  bool
+	HardReset      bool
+	PrintVersion   bool
 }
 
-// ParseCLI parses all (supported) arguments from the command line and stores them in a CLIOptions
-// struct
-func ParseCLI() CLIOptions {
+// GetCLI retrieves (and parses if necessary) all arguments from the command line. These values are
+// stored for later use
+func GetCLI() CLIOptions {
+	if !parsedCLI.Loaded {
+		parsedCLI = parseCLI()
+	}
+	return parsedCLI
+}
+
+func parseCLI() CLIOptions {
 	var opts CLIOptions
-	attachStringFlag("name", "n", "The filename prefix of the next recording", "", &opts.OutputFileNamePrefix)
-	attachStringFlag("operation", "", "Operation Slug to use when saving evidence", "", &opts.OperationSlug)
 	attachStringFlag("shell", "s", "Path to the shell to use for recording", "", &opts.RecordingShell)
 	attachBoolFlag("menu", "m", "Show main menu", false, &opts.ShowMenu)
 	attachBoolFlag("print-config", "pc", "Print current configuration (post-command line arguments), then exits", false, &opts.PrintConfig)
@@ -30,6 +37,7 @@ func ParseCLI() CLIOptions {
 	attachBoolFlag("reset-hard", "", "Ignore the config file and rerun first run", false, &opts.HardReset)
 	attachBoolFlag("v", "", "output the software version and build information", false, &opts.PrintVersion)
 	flag.Parse()
+	opts.Loaded = true
 	return opts
 }
 

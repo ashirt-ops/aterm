@@ -1,8 +1,6 @@
 package appdialogs
 
 import (
-	"encoding/json"
-	"io/ioutil"
 	"os"
 
 	"github.com/theparanoids/ashirt-server/backend/dtos"
@@ -17,7 +15,8 @@ import (
 // FirstRun collects configuration data when the application is run for the first time. Data can be
 // loaded from an external source (other ASHIRT application). Each question is prefaced with a small
 // description of what is needed
-func FirstRun(primaryConfigFile, pathToCommonConfig string) (config.TermRecorderConfigOverrides, error) {
+func FirstRun(primaryConfigFile, pathToCommonConfig string) error {
+	var exitErr error
 	printf("Hi and welcome to the ASHIRT Terminal Recorder. \n"+
 		"\n"+
 		"I couldn't read a configuration file (I looked here: %v). "+
@@ -26,72 +25,85 @@ func FirstRun(primaryConfigFile, pathToCommonConfig string) (config.TermRecorder
 		fancy.WithBold(primaryConfigFile),
 	)
 
-	var configData config.TermRecorderConfigOverrides
-
-	// try to read common config
-	content, err := ioutil.ReadFile(pathToCommonConfig)
-	if err == nil {
-		err = json.Unmarshal(content, &configData)
-		if err == nil {
-			printf("I was able to load defaults from another ASHIRT application. Let's double check these values.\n\n")
-		}
-	}
-
 	printline("If the value in [brackets] looks good, simply press enter to accept that value.")
-	configData.APIURL = askFor(apiURLFields, configData.APIURL, firstRunBail).Value
+	currentConfig := config.CloneConfig()
+	currentConfig.OutputDir = realize(
+		askFor(savePathFields, thisOrThat(&currentConfig.OutputDir, defaultRecordingHome), firstRunBail).Value)
 
-	printline("I need to know your credentials to talk to the ASHIRT servers. You can generate a new key from your account settings on the ASHIRT website.")
-	configData.AccessKey = askFor(accessKeyFields, configData.AccessKey, firstRunBail).Value
-	configData.SecretKey = askFor(secretKeyFields, configData.SecretKey, firstRunBail).Value
-
-	configData.OutputDir = askFor(savePathFields, thisOrThat(configData.OutputDir, defaultRecordingHome), firstRunBail).Value
-
-	checkConnection := true
-
-	for checkConnection {
-		printf(fancy.ClearLine("Let's check the network connection\n"))
-
-		network.SetBaseURL(*configData.APIURL)
-		network.SetAccessKey(*configData.AccessKey)
-		network.SetSecretKey(*configData.SecretKey)
-
-		var testErr error
-		dialog.DoBackgroundLoading(dialog.SyncedFunc(func() {
-			_, testErr = network.TestConnection()
-		}))
-		if testErr == nil {
-			printf("These configurations work.\n")
-			checkConnection = false
-		} else if errors.Is(testErr, errors.ErrConnectionNotFound) {
-			printf("It looks like the server is not available or the address is wrong.\n")
-			fix, err := dialog.YesNoPrompt("Do you want to try to fix this?", "", medium)
-			if fix && err == nil {
-				configData.APIURL = askFor(apiURLFields, configData.APIURL, firstRunBail).Value
-			} else {
-				checkConnection = false
-			}
-		} else if errors.Is(testErr, errors.ErrConnectionUnauthorized) {
-			printf("The server did not accept your access and secret key.\n")
-			fix, err := dialog.YesNoPrompt("Do you want to try to fix this?", "", medium)
-			if fix && err == nil {
-				configData.AccessKey = askFor(AskForNoPreamble(accessKeyFields), configData.AccessKey, firstRunBail).Value
-				configData.SecretKey = askFor(AskForNoPreamble(secretKeyFields), configData.SecretKey, firstRunBail).Value
-			} else {
-				checkConnection = false
-			}
-		} else {
-			printf("I got an error I wasn't expecting. It's: '%v'. "+
-				"This may be due to a network issue with the ASHIRT servers or with your own connection. "+
-				"Please try contacting an administrator for help.\n", testErr.Error())
-			checkConnection = false
+	configData, err := config.LoadASHIRTServersFile()
+	if err == nil {
+		printf("I was able to find server connections from the ASHIRT application.\n\n")
+		exitErr = config.ImportServersConnections(configData, false)
+		if exitErr != nil {
+			printf("I have loaded these settings, but was unable to save them. You may need to try this again next time.")
 		}
+	} else {
+		printf("I need to know how to connect to the ASHIRT servers. Let's get a first server connection " +
+			"established. More can be added later in the main menu.")
+
+		defaultServer := config.GetDefaultConnection()
+		defaultServer.HostPath = realize(askFor(apiURLFields, &defaultServer.HostPath, firstRunBail).Value)
+
+		printline("I need to know your credentials to talk to the ASHIRT servers. You can generate a new key from your account settings on the ASHIRT website.")
+		defaultServer.AccessKey = realize(askFor(apiURLFields, &defaultServer.AccessKey, firstRunBail).Value)
+		defaultServer.SecretKey = realize(askFor(apiURLFields, &defaultServer.SecretKey, firstRunBail).Value)
+
+		checkConnection := true
+
+		for checkConnection {
+			printf(fancy.ClearLine("Let's check the network connection\n"))
+			var testErr error
+			dialog.DoBackgroundLoading(dialog.SyncedFunc(func() {
+				_, testErr = network.TestCustomConnection(defaultServer)
+			}))
+
+			if testErr == nil {
+				printf("These configurations work.\n")
+				checkConnection = false
+			} else if errors.Is(testErr, errors.ErrConnectionNotFound) {
+				printf("It looks like the server is not available or the address is wrong.\n")
+				fix, err := dialog.YesNoPrompt("Do you want to try to fix this?", "", medium)
+				if fix && err == nil {
+					defaultServer.HostPath = realize(askFor(apiURLFields, &defaultServer.HostPath, firstRunBail).Value)
+				} else {
+					checkConnection = false
+				}
+			} else if errors.Is(testErr, errors.ErrConnectionUnauthorized) {
+				printf("The server did not accept your access and secret key.\n")
+				fix, err := dialog.YesNoPrompt("Do you want to try to fix this?", "", medium)
+				if fix && err == nil {
+					defaultServer.AccessKey = realize(askFor(AskForNoPreamble(accessKeyFields), &defaultServer.AccessKey, firstRunBail).Value)
+					defaultServer.SecretKey = realize(askFor(AskForNoPreamble(secretKeyFields), &defaultServer.SecretKey, firstRunBail).Value)
+				} else {
+					checkConnection = false
+				}
+			} else {
+				printf("I got an error I wasn't expecting. It's: '%v'. "+
+					"This may be due to a network issue with the ASHIRT servers or with your own connection. "+
+					"Please try contacting an administrator for help.\n", testErr.Error())
+				checkConnection = false
+			}
+		}
+		_, exitErr = config.UpsertServer(defaultServer)
+		if exitErr != nil {
+			printf("I was unable to write the server to disk. You may need to repeat this process next time you start the application.")
+		}
+
 	}
 
 	printf("\nOkay, that should be enough data for now. "+
 		"I will create a configuration file here: %v. "+
-		"You can find additional configuration options there.\n\n", config.ATermConfigPath())
+		"You can find additional configuration options there, or you can edit the configration "+
+		"within the application directly from the main menu.\n\n", config.ATermConfigPath())
 
-	return configData, nil
+	updatedCfg := config.CurrentConfig().PreviewConfigUpdates(currentConfig)
+	config.SetConfig(updatedCfg)
+	updateCfgErr := config.SaveConfig()
+	if updateCfgErr != nil {
+		exitErr = errors.Append(exitErr, updateCfgErr)
+	}
+
+	return exitErr
 }
 
 func askForOperationSlug(availableOps []dtos.Operation, currentOperationSlug string) dialog.SelectResponse {

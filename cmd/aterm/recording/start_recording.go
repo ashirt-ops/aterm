@@ -28,14 +28,12 @@ import (
 // a recording.
 //
 // This structure contains the following fields:
-// FileName: The name of the file to be written
 // FileDir: Where the file should be stored
 // Shell: What shell to use for the PTY
 // EventMiddleware: How to transform events that come through
 // OnRecordingStart: A hook into the recording process just before actual recording starts
 //   This is intended allow the user to provide messaging to the user
 type RecordingInput struct {
-	FileName         string
 	FileDir          string
 	Shell            string
 	TermInput        io.Reader
@@ -76,7 +74,6 @@ func StartRecording(opSlug string) (RecordingOutput, error) {
 
 	recOpts := RecordingInput{
 		FileDir:   filepath.Join(config.OutputDir(), opSlug),
-		FileName:  config.OutputFileName(),
 		Shell:     config.RecordingShell(),
 		TermInput: recConfig.ptyReader,
 		OnRecordingStart: func(output RecordingOutput) {
@@ -157,7 +154,7 @@ func copyRouter(dsts []io.Writer, src io.Reader, target *int) (written int64, er
 
 func record(ri RecordingInput) (RecordingOutput, error) {
 	var result RecordingOutput
-	tw, err := write.NewStreamingFileWriter(ri.FileDir, ri.FileName, formatters.ASCIICast, true)
+	tw, err := write.NewStreamingFileWriter(ri.FileDir, "", formatters.ASCIICast, true)
 
 	if err != nil {
 		return result, errors.Wrap(err, "Unable to create file writer")

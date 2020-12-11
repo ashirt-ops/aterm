@@ -10,7 +10,7 @@ import (
 )
 
 // ShowInvalidConfigurationMessage renders user-messaging when a validation error occurs.
-// To actually validate the config, see config.ValidateConfig/ValidateLoadedConfig
+// To actually validate the config, see config.ValidateServerConfig
 func ShowInvalidConfigurationMessage(validationErr error) {
 	if validationErr == nil {
 		return
@@ -46,7 +46,7 @@ func ShowInvalidConfigMessageNoHelp(validationErr error) bool {
 		hasAccessIssue = true
 	}
 	if errors.Is(validationErr, errors.ErrAPIURLUnparsable) {
-		printline(" * API URL is invalid")
+		printline(" * Host path is invalid")
 	}
 	printline()
 
@@ -66,4 +66,10 @@ func ShowUnableToSaveConfigErrorMessage(err error) {
 	printline("I was unable to save the updated configuration data. I encountered this error:")
 	printline(" " + fancy.WithPizzazz(err.Error(), fancy.Red))
 	printline("Settings will be saved for this run, but will need to be reconfigured the next time you start.")
+}
+
+func ShowFirstRunErrorMessage(err error) {
+	printline("It looks like the startup process ran into some issues: ")
+	// TODO: list the errors
+	printline("Configuration details are saved for now, but may need to be re-done on a future run.")
 }

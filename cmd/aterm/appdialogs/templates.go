@@ -30,6 +30,14 @@ var askForTemplate = template.Must(fancyTemplate.New("askFor").Parse(
 		"\n\r",
 ))
 
+var serverSettingsTemplate = template.Must(fancyTemplate.New("serverSetting").Parse(
+	"{{clear}}\r" +
+		"Name:       {{.ServerName | bold}}\n\r" +
+		"Host Path:  {{.HostPath | bold}}\n\r" +
+		"Access Key: {{.AccessKey | bold}}\n\r" +
+		"Secret key: {{.SecretKey | bold}}\n\r",
+))
+
 // ***** template structures *****
 
 // AskForTemplateFields is used with the askForTempate template
@@ -40,6 +48,10 @@ type AskForTemplateFields struct {
 	Prompt       string
 	// DoValidation bool
 	// ValidateAnswer func() bool
+}
+
+type AskForTemplateModifiers struct {
+	WithPreamble *bool
 }
 
 // NamedExample represents a single example text, and an optional name
@@ -53,6 +65,15 @@ type NamedExample struct {
 // AskForNoPreamble returns an AskForTemplateFields modified to not generate the preamble or examples
 func AskForNoPreamble(base AskForTemplateFields) AskForTemplateFields {
 	base.WithPreamble = false
+	return base
+}
+
+// edit alters the given template with the provided mods. All non-nil mods will be applied to
+// the template
+func edit(base AskForTemplateFields, mods AskForTemplateModifiers) AskForTemplateFields {
+	if mods.WithPreamble != nil {
+		base.WithPreamble = *mods.WithPreamble
+	}
 	return base
 }
 
@@ -100,6 +121,12 @@ var apiURLFields = AskForTemplateFields{
 	WithPreamble: true,
 	Preamble:     "Where are the ASHIRT servers located? If you don't know, please contact your administrator.",
 	Prompt:       "Enter the API URL",
+}
+
+var serverNameFields = AskForTemplateFields{
+	WithPreamble: true,
+	Preamble:     "What is the name of the server? This can be any value, and is here to help you identify the server later.",
+	Prompt:       "Enter the server name",
 }
 
 var upgradeNoticeTemplate = template.Must(fancyTemplate.New("upgradeNotice").Parse(

@@ -15,7 +15,7 @@ type MenuState struct {
 	AvailableOperations []dtos.Operation
 	DialogInput         io.ReadCloser
 	RecordedMetadata    RecordingMetadata
-	InstanceConfig      config.TermRecorderConfig
+	InstanceConfig      config.Config
 }
 
 var internalMenuState = MenuState{}

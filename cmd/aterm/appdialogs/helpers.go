@@ -38,10 +38,10 @@ func askFor(msg AskForTemplateFields, guessValue *string, bailFunc func()) dialo
 	return queryWithDefault(msg.Prompt, guessValue, bailFunc)
 }
 
-// thisOrThat provides a mechansim to return either the provided "this", or if nil, the provided
-// "that", converted to a string pointer
+// thisOrThat provides a mechansim to return either the provided "this", or if nil (or empty string), 
+// the provided "that", converted to a string pointer
 func thisOrThat(this *string, that string) *string {
-	if this == nil {
+	if this == nil || *this == "" {
 		return strPtr(that)
 	}
 	return this
@@ -49,6 +49,13 @@ func thisOrThat(this *string, that string) *string {
 
 func strPtr(s string) *string {
 	return &s
+}
+
+func realize(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // defaultRecordingHome represents the path to what a first time user would be suggested as a location
