@@ -40,7 +40,19 @@ func WriteSettings() error {
 	return writeSettings(localSettings)
 }
 
+func encodeCachedHistory() []ServerSettingHistory {
+	history := make([]ServerSettingHistory, len(cachedServerHistory))
+	i := 0
+	for _, val := range cachedServerHistory {
+		history[i] = val
+		i++
+	}
+	return history
+}
+
 func writeSettings(settings Settings) error {
+	hist := encodeCachedHistory()
+	settings.ServerHistory = hist
 	data, err := json.Marshal(settings)
 	if err == nil {
 		err = writeFile(data, ATermSettingsPath())
@@ -90,10 +102,14 @@ func LastOperation() string {
 	return val.LastOperationSlug
 }
 
-func SetLastUsedOperation(lastOpSlug string)  {
+func SetLastUsedOperation(lastOpSlug string) {
 	val, ok := cachedServerHistory[ActiveServerUUID()]
-	if ok {
-		val.LastOperationSlug = lastOpSlug
-		// TODO: will this work properly?
+	if !ok {
+		val = ServerSettingHistory{
+			ServerUUID: ActiveServerUUID(),
+		}
 	}
+	val.LastOperationSlug = lastOpSlug
+	cachedServerHistory[ActiveServerUUID()] = val
+	WriteSettings() // best effort
 }
