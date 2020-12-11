@@ -83,5 +83,6 @@ func upgrade() {
 		cfgv2.OutputDir = cfgv1.GetOutputDir()
 		cfgv2.RecordingShell = cfgv1.GetRecordingShell()
 		EnableV2Config(cfgv2)
+		SaveConfig()
 	}
 }
