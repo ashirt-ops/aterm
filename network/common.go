@@ -4,7 +4,6 @@
 package network
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,50 +13,50 @@ import (
 	"time"
 
 	"github.com/theparanoids/ashirt-server/signer"
+	"github.com/theparanoids/aterm/common"
 	"github.com/theparanoids/aterm/errors"
 )
 
 var client = &http.Client{}
 
-var apiURL string
-var accessKey string
-var secretKey []byte
+var currentServer common.Server = common.NoServer
 
-// SetBaseURL Sets the url to use as a base for all service contact
-// Note: this function only requires the url to reach the frontend service.
-// routes will be deduced from that.
-func SetBaseURL(url string) {
-	apiURL = url
-	if !strings.HasSuffix(apiURL, "/") {
-		apiURL += "/"
+// SetServer sets the connection details for connecting to the remote server
+func SetServer(server common.Server) {
+	currentServer = server
+}
+
+// IsServerSet checks if SetServer has been called
+func IsServerSet() bool {
+	return currentServer != common.NoServer
+}
+
+func getAPIUrl(domain string) string {
+	if !strings.HasSuffix(domain, "/") {
+		domain += "/"
 	}
-	apiURL += "api"
+	domain += "api"
+	return domain
 }
 
-// BaseURLSet is a small check to verify that some value exists for the BaseURL
-func BaseURLSet() bool {
-	return apiURL != ""
+func mkURL(endpoint string) string {
+	return getAPIUrl(currentServer.HostPath) + endpoint
 }
 
-// SetAccessKey sets the common access key for all API actions
-func SetAccessKey(key string) {
-	accessKey = key
-}
-
-// SetSecretKey sets the common secret key for all API actions.
-// The provided key must be a base64 string
-func SetSecretKey(key string) error {
-	var err error
-	secretKey, err = base64.StdEncoding.DecodeString(key)
-	return err
+func mkCustomURL(domain, endpoint string) string {
+	return getAPIUrl(domain) + endpoint
 }
 
 // addAuthentication adds Date and Authentication headers to the provided request
 // returns an error if building an appropriate authentication value fails, nil otherwise
 // Note: This should be called immediately before sending a request.
 func addAuthentication(req *http.Request) error {
+	return addArbitraryAuthentication(currentServer, req)
+}
+
+func addArbitraryAuthentication(server common.Server, req *http.Request) error {
 	req.Header.Set("Date", time.Now().In(time.FixedZone("GMT", 0)).Format(time.RFC1123))
-	authorization, err := signer.BuildClientRequestAuthorization(req, accessKey, secretKey)
+	authorization, err := signer.BuildClientRequestAuthorization(req, server.AccessKey, server.SecretKeyAsB64())
 	if err != nil {
 		return err
 	}
@@ -100,6 +99,23 @@ func makeJSONRequest(method, url string, body io.Reader) (*http.Response, error)
 	req.Header.Add("Content-Type", "application/json")
 
 	if err = addAuthentication(req); err != nil {
+		return nil, err
+	}
+
+	return client.Do(req)
+}
+
+// todo: maybe refactor makeJSONRequest and makeCustomJSONRequest to share a common base?
+func makeCustomJSONRequest(method, endpoint string, server common.Server, body io.Reader) (*http.Response, error) {
+	url := mkCustomURL(server.HostPath, endpoint)
+	req, err := http.NewRequest(method, url, body)
+
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Content-Type", "application/json")
+
+	if err = addArbitraryAuthentication(server, req); err != nil {
 		return nil, err
 	}
 

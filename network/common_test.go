@@ -10,8 +10,8 @@ import (
 )
 
 func TestSetBaseURL(t *testing.T) {
-	require.False(t, BaseURLSet())
+	require.False(t, IsServerSet())
 	SetBaseURL("Something")
 	require.Equal(t, "Something/api", apiURL)
-	require.True(t, BaseURLSet())
+	require.True(t, IsServerSet())
 }

@@ -14,7 +14,7 @@ import (
 func GetOperations() ([]dtos.Operation, error) {
 	var ops []dtos.Operation
 
-	resp, err := makeJSONRequest("GET", apiURL+"/operations", http.NoBody)
+	resp, err := makeJSONRequest("GET", mkURL("/operations"), http.NoBody)
 	if err != nil {
 		return ops, errors.Append(err, errors.ErrCannotConnect)
 	}

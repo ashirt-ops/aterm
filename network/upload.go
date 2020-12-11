@@ -37,12 +37,10 @@ type UploadInput struct {
 	Content       io.Reader
 }
 
-const ErrCouldNotInitMsg = "Unable to initialize Request"
-
 // UploadToAshirt uploads a terminal recording to the AShirt service. The remote service must
 // be configured by calling network.SetBaseURL(string) before uploading.
 func UploadToAshirt(ui UploadInput) (*dtos.Evidence, error) {
-	url := apiURL + "/operations/" + ui.OperationSlug + "/evidence"
+	url := mkURL("/operations/" + ui.OperationSlug + "/evidence")
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 	jsonTags, _ := json.Marshal(ui.TagIDs)
@@ -58,9 +56,11 @@ func UploadToAshirt(ui UploadInput) (*dtos.Evidence, error) {
 		}
 	}
 
+	const couldNotInitMsg = "Unable to initialize Request"
+
 	part, err := writer.CreateFormFile("file", ui.Filename)
 	if err != nil {
-		return nil, errors.Wrap(err, ErrCouldNotInitMsg)
+		return nil, errors.Wrap(err, couldNotInitMsg)
 	}
 	_, err = io.Copy(part, ui.Content)
 	if err != nil {
@@ -68,17 +68,17 @@ func UploadToAshirt(ui UploadInput) (*dtos.Evidence, error) {
 	}
 	err = writer.Close()
 	if err != nil {
-		return nil, errors.Wrap(err, ErrCouldNotInitMsg)
+		return nil, errors.Wrap(err, couldNotInitMsg)
 	}
 
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
-		return nil, errors.Wrap(err, ErrCouldNotInitMsg)
+		return nil, errors.Wrap(err, couldNotInitMsg)
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	err = addAuthentication(req)
 	if err != nil {
-		return nil, errors.Wrap(err, ErrCouldNotInitMsg)
+		return nil, errors.Wrap(err, couldNotInitMsg)
 	}
 
 	resp, err := client.Do(req)

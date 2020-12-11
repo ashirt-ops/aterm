@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/theparanoids/ashirt-server/backend/dtos"
+	"github.com/theparanoids/aterm/common"
 	"github.com/theparanoids/aterm/errors"
 )
 
@@ -15,7 +16,14 @@ import (
 // ErrConnectionUnknownStatus, ErrConnectionNotFound, ErrConnectionUnauthorized
 // use errors.Is(err, target) to check these errors
 func TestConnection() (string, error) {
-	resp, err := makeJSONRequest("GET", apiURL+"/checkconnection", http.NoBody)
+	return TestCustomConnection(currentServer)
+}
+
+// TestCustomConnection performs a basic query to the backend and interprets the results.
+// Unlike TestConnection, this function allows the caller to specify connection details -- useful
+// when you need to test without setting
+func TestCustomConnection(server common.Server) (string, error) {
+	resp, err := makeCustomJSONRequest("GET", "/checkconnection", server, http.NoBody)
 	if err != nil {
 		return "", err
 	}

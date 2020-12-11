@@ -17,7 +17,7 @@ import (
 func GetTags(operationSlug string) ([]dtos.Tag, error) {
 	var tags []dtos.Tag
 
-	resp, err := makeJSONRequest("GET", apiURL+"/operations/"+operationSlug+"/tags", http.NoBody)
+	resp, err := makeJSONRequest("GET", mkURL("/operations/"+operationSlug+"/tags"), http.NoBody)
 	if err != nil {
 		return tags, errors.Append(err, errors.ErrCannotConnect)
 	}
@@ -43,7 +43,7 @@ func CreateTag(operationSlug, name, colorName string) (*dtos.Tag, error) {
 		return nil, errors.Wrap(err, "Unable to create tag")
 	}
 
-	resp, err := makeJSONRequest("POST", apiURL+"/operations/"+operationSlug+"/tags", bytes.NewReader(content))
+	resp, err := makeJSONRequest("POST", mkURL("/operations/"+operationSlug+"/tags"), bytes.NewReader(content))
 
 	if err != nil {
 		return nil, errors.Append(err, errors.ErrCannotConnect)
