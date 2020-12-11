@@ -100,9 +100,13 @@ func LoadConfig() error {
 			cfg, _ := DeserializeV2(data)
 			EnableV2Config(cfg)
 		default:
+			cfg, _ := DeserializeV2(makeV2DefaultConfigAsByteSlice())
+			EnableV2Config(cfg) // set a basic config with no data
 			return errors.ErrUnknownConfigVersion
 		}
 	} else {
+		cfg, _ := DeserializeV2(makeV2DefaultConfigAsByteSlice())
+		EnableV2Config(cfg) // set a basic config with no data
 		return errors.ErrUnknownConfigFormat
 	}
 
