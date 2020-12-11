@@ -13,5 +13,6 @@ func interpretConfigData(data []byte) TermRecorderConfigV0 {
 	if err != nil {
 		return TermRecorderConfigV0{}
 	}
+	basicConfig.Interpreted = true
 	return basicConfig
 }
