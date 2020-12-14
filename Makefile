@@ -89,5 +89,5 @@ debug-menu: build-for-debug
 	dist/aterm/debug/aterm -menu -pid
 
 .PHONY: debug-run
-debug-menu: build-for-debug
+debug-run: build-for-debug
 	dist/aterm/debug/aterm -pid
