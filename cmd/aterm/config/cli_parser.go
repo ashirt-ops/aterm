@@ -17,6 +17,7 @@ type CLIOptions struct {
 	ForceFirstRun  bool
 	HardReset      bool
 	PrintVersion   bool
+	PrintPID       bool
 }
 
 // GetCLI retrieves (and parses if necessary) all arguments from the command line. These values are
@@ -32,6 +33,7 @@ func parseCLI() CLIOptions {
 	var opts CLIOptions
 	attachStringFlag("shell", "s", "Path to the shell to use for recording", "", &opts.RecordingShell)
 	attachBoolFlag("menu", "m", "Show main menu", false, &opts.ShowMenu)
+	attachBoolFlag("pid", "", "Print this process's PID", false, &opts.PrintPID)
 	attachBoolFlag("print-config", "pc", "Print current configuration (post-command line arguments), then exits", false, &opts.PrintConfig)
 	attachBoolFlag("reset", "", "Rerun first run to set up initial values", false, &opts.ForceFirstRun)
 	attachBoolFlag("reset-hard", "", "Ignore the config file and rerun first run", false, &opts.HardReset)

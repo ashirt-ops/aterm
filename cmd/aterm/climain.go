@@ -20,6 +20,10 @@ func main() {
 	printConfig := config.GetCLI().PrintConfig
 	showMenu := config.GetCLI().ShowMenu
 
+	if config.ShowPID() {
+		appdialogs.PrintPID()
+	}
+
 	if info.Flag() || config.GetCLI().PrintVersion {
 		appdialogs.PrintExtendedVersion()
 		return

@@ -43,6 +43,10 @@ func RecordingShell() string {
 	return loadedConfig.GetRecordingShell()
 }
 
+func ShowPID() bool {
+	return GetEnv().PrintPID || GetCLI().PrintPID
+}
+
 // Ready reads config data from multiple sources (CLI, env, connection info, settings, etc)
 func Ready() error {
 	opts := GetCLI()

@@ -1,6 +1,8 @@
 package appdialogs
 
 import (
+	"os"
+
 	"github.com/theparanoids/aterm/cmd/aterm/config"
 )
 
@@ -14,4 +16,9 @@ func PrintVersion() {
 // Note: this should only be called _after_ parsing CLI options
 func PrintExtendedVersion() {
 	printline("Go runtime:", config.GoRuntime(), " Build Date:", config.BuildDate())
+}
+
+// PrintPID simply prints this application's PID. Useful specifically for debugging
+func PrintPID() {
+	printf("This PID: %v\n", os.Getpid())
 }

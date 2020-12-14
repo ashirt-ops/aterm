@@ -10,6 +10,7 @@ var loadedEnv EnvConfig
 type EnvConfig struct {
 	Loaded         bool
 	LoadingError   error
+	PrintPID       bool   `split_words:"true"`
 	RecordingShell string `split_words:"true"`
 	ServerName     string `split_words:"true"`
 }
