@@ -27,6 +27,48 @@ This application can render its build details, including version to the user. Th
 
 These fields are populated during ci, using GitHub Action's environment variables for these fields. These correspond to the fields `GITHUB_REF` and `GITHUB_SHA`. Dates are generated via the build system's date.
 
+## Debugging
+
+Debugging is slightly complicated with this application. If you are used to using `dlv` directly, you may not have an issue. But, if you are used to using a 3rd party application to do this, you may run into an issue where the debugging UI does not have an interactive shell, preventing you from actually making any choices. While this is certainly not an exaustive list of debugging applications, here's a list of the changes that need to be done to debug in the following applications.
+
+Note that as a convenience, the Makefile has an option to `debug-menu` or `debug-run` which will build the application with the appropriate debug flags, and then start the application, while printing the PID.
+
+### Visual Studio Code
+
+#### Early Startup
+
+Early startup seems to be easiest to accomplish with the following debug configuration:
+
+```json
+{
+    "name": "Launch ATerm",
+    "type": "go",
+    "request": "launch",
+    "mode": "debug",
+    "program": "${workspaceRoot}/cmd/aterm/",
+    "env": {},
+    "args": []
+}
+```
+
+And simply start debugging as usual. However, once you hit any kind of menu action, the debug session is likely to break, so this is best used only when there are issues early in the application (e.g. debugging configuration issues)
+
+#### Menu debugging
+
+The following debug configuration seems to work:
+
+```json
+{
+    "name": "Attach to local process",
+    "type": "go",
+    "request": "attach",
+    "mode": "local",
+    "processId": 0
+}
+```
+
+To use this, first, build the application (see `make build-for-debug`), then, start the now-built application binary. Finally, find the pid of the application, set _that_ as the `processId` above, and finally start that debugging action in vscode. At this point, you can control the interaction with a standard terminal session and investigate state in visual studio code, as normal
+
 ## Project Structure
 
 ### Phase 1: Terminal recording

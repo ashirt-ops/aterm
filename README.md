@@ -37,27 +37,109 @@ After each recording, a small menu is presented with available options:
 
 ### Configuration
 
-This binary supports a few configuration options, and will attempt to load from each configuration level in order to come up with a complete view of how the interaction should be handled. The configuration levels are as follows: First, load from the config file, then replace with defined values from the env vars, then replace with command line switches.
+This application supports multiple configuration areas. To complicate matters, some configuration techniques support versioning, while certain options are overridable at different levels. The charts below indicate what values are configurable, and what effect they'll have.
 
-Additionally, on first run, if you are using the ASHIRT application, then some configuration details can be pulled from its configuration file.
+Note: values for the configuration files (config.yaml and servers.json) can be specified by using the application -- a fresh start will guide a user towards some initial setup.
 
-The configuration file adheres to the XDG standard, where applicable. If you have XDG_CONFIG_HOME set, then your config file will be found under the `ashirt` directory. If this value is not set, then it will likely be saved to `/home/{who}/ashirt/aterm.yaml`. However, most settings can be tweaked in the application itself, by going to the main menu and choosing "Update Settings". A small guide will take you through common configuration values
+#### Overriding configuration values
 
-| Config File Parameter | Env Parameter                         | CLI flag          | Meaning                                                                                               |
-| --------------------- | ------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------- |
-| outputDir             | ASHIRT_TERM_RECORDER_OUTPUT_DIR       |                   | Determines where to store recording files. Defaults to home directory                                 |
-| recordingShell        | ASHIRT_TERM_RECORDER_RECORDING_SHELL  | -shell       -s   | Which shell to use when starting up (defaults to env's SHELL)                                         |
-| operationSlug         | ASHIRT_TERM_RECORDER_OPERATION_SLUG   | -operation        | Which operation to upload to (by default -- can be selected prior to recording)                       |
-| apiURL                | ASHIRT_TERM_RECORDER_API_URL          |                   | Where the **backend** service is located.                                                             |
-| N/A                   | ASHIRT_TERM_RECORDER_OUTPUT_FILE_NAME | --name -n         | What filename to use when writing the file locally (and remotely as well)                             |
-| accessKey             | ASHIRT_TERM_RECORDER_ACCESS_KEY       | N/A               | The Access Key needed to connect with the backend (created on the frontend)                           |
-| secretKey             | ASHIRT_TERM_RECORDER_SECRET_KEY       | N/A               | The Secret Key needed to connect with the backend (created on the frontend). This is a base-64 value  |
-|                       |                                       | -menu -m          | Starts in the main menu                                                                               |
-|                       |                                       | -pring-config -pc | Prints the loaded configuration, then exits                                                           |
-|                       |                                       | -help -h          | Opens the help menu                                                                                   |
-|                       |                                       | -shell -s         | Launches the recoder with the specified shell. This should be the path to the binary                  |
-|                       |                                       | -reset            | Launches first-run to set up initial values. Uses the existing values as a base.                      |
-|                       |                                       | -reset-hard       | Launches first-run to set up initial config values. Does not use the existing configuration as a base |
+In general, there are 4 levels of configuration:
+
+* Default values (used when no configuration is provided)
+* Values specified in the config files
+* Values specified with environment variables
+* Values specified with command line arguments
+
+Values are presented to the application in the order specified above, meaning that command line arguments override environment variables, which in turn override config file values, which ultimately override default values.
+
+#### File Paths
+
+This application looks for files based on the `XDG_CONFIG_HOME` value (if present), or alternatively what would be an appropriate path for operating systems that don't support the XDG standard. Below, file locations will be listed as `${XDG_CONFIG_HOME}`. That, in turn, means the following on the below operating systems
+
+| OS      | Possible location               | Notes                                                                                                            |
+| ------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Windows | `%LOCALAPPDATA%`                | Unsupported, but once it is, it will be located here                                                             |
+| Mac OS  | `~/Library/Application Support` |                                                                                                                  |
+| Linux   | typically `~/.config`           | Uses the actual XDG_CONFIG_HOME variable; this is configurable, so check `$XDG_CONFIG_HOME` on your own computer |
+
+#### Configuration File
+
+The configuration file has been versioned, and _currently_ contains 2 versions (numbered 1 and 2). Applications that currently have a version 1 config will be silently upgraded into a version 2 config on the next run.
+
+Location: `${XDG_CONFIG_HOME}/aterm/config.yaml`
+
+The configuration file adheres to the XDG standard, where applicable. If you have XDG_CONFIG_HOME set, then your config file will be found under the `aterm` directory. If this value is not set, then it will likely be saved to `/home/{who}/aterm/config.yaml`.
+
+| Config V1 Parameter | Config V2 Parameter | Meaning                                                                               |
+| ------------------- | ------------------- | ------------------------------------------------------------------------------------- |
+| `configVersion`     | `configVersion`     | The actual version of the configuration file. This should not be changed by hand      |
+| `recordingShell`    | `recordingShell`    | Which shell to use when starting up (defaults to env's SHELL)                         |
+| `outputDir`         | `outputDir`         | Determines where to store recording files. Defaults to home directory                 |
+| `apiURL`            | N/A                 | Where to access the backend. Moved to Servers                                         |
+| `accessKey`         | N/A                 | How to access the backend. Akin to a username. Moved to Servers                       |
+| `secretKey`         | N/A                 | How to access the backend. Akin to a password. Moved to Servers                       |
+| `operationSlug`     | N/A                 | Obsolete. No current version exists to specify which operation slug to use on startup |
+
+#### Servers File
+
+The servers file is a `json` file format describing how to connect to each backend server.
+
+Location: `${XDG_CONFIG_HOME}/aterm/servers.json`
+
+| Field Name | Type           | Meaning                                                                                         |
+| ---------- | -------------- | ----------------------------------------------------------------------------------------------- |
+| version    | int            | Which version of the servers file is being used                                                 |
+| servers    | servers-struct | A list containing the known servers. See the servers-struct section below for the specification |
+
+##### Servers Struct
+
+A single entry reflecting a server connection.
+
+| Field Name | Type   | Meaning                                                                                                                                                |
+| ---------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| id         | int    | The "order" of the servers. Ordered by (effectively) date-created                                                                                      |
+| serverName | string | The name of the server.                                                                                                                                |
+| serverUuid | string | A unique identifier for each server. This should not be hand edited                                                                                    |
+| accessKey  | string | Part of the information on how to authenticate with the server. Akin to a username                                                                     |
+| secretKey  | string | Part of the information on how to authenticate with the server. Akin to a password                                                                     |
+| hostPath   | string | Where to find the backend. Typically looks like a standard URL                                                                                         |
+| deleted    | bool   | Whether this entry has been "deleted". Servers that are maked as deleted will not be shown, but can be restored by changing this value back to `false` |
+
+#### Environment Variables
+
+Environment Variables have been disabled, due to lack of use.
+
+#### Command Line Arguments
+
+| Flag                   | Alt   | Meaning                                                                        |
+| ---------------------- | ----- | ------------------------------------------------------------------------------ |
+| `-shell path/to/shell` | `-s`  | Specifies the shell to use when recording                                      |
+| `-menu`                | `-m`  | Starts at the main menu, rather than starting a new recording                  |
+| `-pid`                 |       | Shows the pid on startup.                                                      |
+| `-print-config`        | `-pc` | Shows the current configuration on startup                                     |
+| `-reset`               |       | Show the first-run dialog on start (keeps current configuration values)        |
+| `-reset-hard`          |       | Shows the first-run dialog on start. Discards the current configuration values |
+| `-version`             | `-v`  | Prints the version, then exits                                                 |
+| `-help`                | `-h`  | Shows the help menu, then exits                                                |
+
+#### Settings File
+
+The settings file is a `json` file format describing the values used during the last run, to make future runs more automatic.
+Note that it is unnecessary to ever view or edit this value by hand, but it is provided here for clarity
+
+Location: `${XDG_CONFIG_HOME}/aterm/settings.json`
+
+| Field Name         | Type                  | Meaning                                                                                            |
+| ------------------ | --------------------- | -------------------------------------------------------------------------------------------------- |
+| selectedServerUUID | string                | Which server was last used when making a recording                                                 |
+| serverState        | server-history-struct | A list of servers and their previous state. See the Server history struct for details on this type |
+
+##### Server History Struct
+
+| Field Name    | Type   | Meaning                                                                    |
+| ------------- | ------ | -------------------------------------------------------------------------- |
+| serverUuid    | string | An identifier for a given server (matched against the servers file entry)  |
+| operationSlug | string | The operation last used when creating a recording for the indicated server |
 
 ### Known Issues
 
