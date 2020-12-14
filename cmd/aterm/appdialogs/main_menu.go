@@ -70,7 +70,8 @@ func startNewRecording(state MenuState) MenuState {
 	resp := askForOperationSlug(state.AvailableOperations, config.LastOperation())
 
 	if resp.IsKillSignal() {
-		return state
+		rtnState.CurrentView = MenuViewMainMenu
+		return rtnState
 	}
 
 	recordedMetadata := RecordingMetadata{
