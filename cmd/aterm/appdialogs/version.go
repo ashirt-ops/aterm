@@ -1,7 +1,10 @@
 package appdialogs
 
 import (
+	"fmt"
 	"os"
+
+	"github.com/theparanoids/aterm/fancy"
 
 	"github.com/theparanoids/aterm/cmd/aterm/config"
 )
@@ -20,5 +23,5 @@ func PrintExtendedVersion() {
 
 // PrintPID simply prints this application's PID. Useful specifically for debugging
 func PrintPID() {
-	printf("This PID: %v\n", os.Getpid())
+	printf("This PID: %v\n", fancy.AsRed(fmt.Sprintf("%v", os.Getpid())))
 }
