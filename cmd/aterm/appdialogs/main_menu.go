@@ -156,7 +156,7 @@ func editConfig() config.Config {
 			overrideCfg.RecordingShell = *q.Value
 		}
 	})
-	ask(shellFields, overrideCfg.OutputDir, func(resp dialog.QueryResponse) {
+	ask(savePathFields, overrideCfg.OutputDir, func(resp dialog.QueryResponse) {
 		overrideCfg.OutputDir = realize(resp.Value)
 	})
 	if stop {

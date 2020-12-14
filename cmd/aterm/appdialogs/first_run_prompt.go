@@ -1,6 +1,7 @@
 package appdialogs
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/theparanoids/ashirt-server/backend/dtos"
@@ -25,7 +26,8 @@ func FirstRun(primaryConfigFile, pathToCommonConfig string) error {
 		fancy.WithBold(primaryConfigFile),
 	)
 
-	printline("If the value in [brackets] looks good, simply press enter to accept that value.")
+	printf("If the value in %v looks good, simply press enter to accept that value.\n",
+		fmt.Sprintf(fancy.AsBold("[%v]"), fancy.AsBlue("brackets")))
 	currentConfig := config.CloneConfig()
 	currentConfig.OutputDir = realize(
 		askFor(savePathFields, thisOrThat(&currentConfig.OutputDir, defaultRecordingHome), firstRunBail).Value)
@@ -45,8 +47,8 @@ func FirstRun(primaryConfigFile, pathToCommonConfig string) error {
 		defaultServer.HostPath = realize(askFor(apiURLFields, &defaultServer.HostPath, firstRunBail).Value)
 
 		printline("I need to know your credentials to talk to the ASHIRT servers. You can generate a new key from your account settings on the ASHIRT website.")
-		defaultServer.AccessKey = realize(askFor(apiURLFields, &defaultServer.AccessKey, firstRunBail).Value)
-		defaultServer.SecretKey = realize(askFor(apiURLFields, &defaultServer.SecretKey, firstRunBail).Value)
+		defaultServer.AccessKey = realize(askFor(accessKeyFields, &defaultServer.AccessKey, firstRunBail).Value)
+		defaultServer.SecretKey = realize(askFor(secretKeyFields, &defaultServer.SecretKey, firstRunBail).Value)
 
 		checkConnection := true
 
