@@ -13,9 +13,9 @@ import (
 
 func askForServer() {
 	createOpt := dialog.SimpleOption{Label: "<New>", Data: ""}
-
+	editOpt := dialog.SimpleOption{Label: "<Edit>", Data: ""}
 	allServers := config.GetAlphaSortedServers()
-	selection := runSelectAServerDialog(allServers, []dialog.SimpleOption{createOpt})
+	selection := runSelectAServerDialog(allServers, []dialog.SimpleOption{createOpt, editOpt})
 	if !selection.IsValid() {
 		return
 	}
@@ -25,6 +25,22 @@ func askForServer() {
 		if err == nil {
 			config.SetActiveServer(newServer.ServerUUID)
 		}
+	} else if selection == editOpt {
+		editSel := runSelectAServerDialog(allServers, []dialog.SimpleOption{})
+		if !editSel.IsValid() {
+			return
+		}
+		server := common.NoServer
+		val, ok := editSel.Data.(string)
+		if ok {
+			server = config.GetServer(val)
+		}
+		
+		newServer, err := createServerDialog(server, false)
+		if err == nil {
+			config.SetActiveServer(newServer.ServerUUID)
+		}
+
 	} else {
 		val, ok := selection.Data.(string)
 		if ok {
