@@ -14,36 +14,57 @@ import (
 func askForServer() {
 	createOpt := dialog.SimpleOption{Label: "<New>", Data: ""}
 	editOpt := dialog.SimpleOption{Label: "<Edit>", Data: ""}
+	deleteOpt := dialog.SimpleOption{Label: "<Delete>", Data: ""}
+	cancelOpt := dialog.SimpleOption{Label: "<Cancel>", Data: ""}
 	allServers := config.GetAlphaSortedServers()
-	selection := runSelectAServerDialog(allServers, []dialog.SimpleOption{createOpt, editOpt})
+
+	extraOptions := []dialog.SimpleOption{createOpt, editOpt}
+
+	if config.GetServerCount() > 1 {
+		extraOptions = append(extraOptions, deleteOpt)
+	}
+
+	selection := runSelectAServerDialog(allServers, extraOptions)
 	if !selection.IsValid() {
 		return
 	}
 
 	if selection == createOpt {
-		newServer, err := createServerDialog(common.NoServer, false)
-		if err == nil {
+		if newServer, err := createServerDialog(common.NoServer, false); err == nil {
 			config.SetActiveServer(newServer.ServerUUID)
 		}
 	} else if selection == editOpt {
-		editSel := runSelectAServerDialog(allServers, []dialog.SimpleOption{})
-		if !editSel.IsValid() {
+		subSelect := runSelectAServerDialog(allServers, []dialog.SimpleOption{cancelOpt})
+		if !subSelect.IsValid() || subSelect == cancelOpt {
 			return
 		}
 		server := common.NoServer
-		val, ok := editSel.Data.(string)
-		if ok {
+		if val, ok := subSelect.Data.(string); ok {
 			server = config.GetServer(val)
 		}
-		
+
 		newServer, err := createServerDialog(server, false)
 		if err == nil {
 			config.SetActiveServer(newServer.ServerUUID)
 		}
-
+	} else if selection == deleteOpt {
+		subSelect := runSelectAServerDialog(allServers, []dialog.SimpleOption{cancelOpt})
+		if !subSelect.IsValid() || subSelect == cancelOpt {
+			return
+		}
+		if val, ok := subSelect.Data.(string); ok {
+			commit, err := dialog.YesNoPrompt("Are you sure you want to delete this server?", "", medium)
+			if err == nil && commit {
+				if err = config.DeleteServer(val); err != nil {
+					printline("Unable to properly delete this server: ", err.Error())
+				} else {
+					// this next line sets the server to itself (if it was not deleted), or to NoServer
+					config.SetActiveServer(config.GetCurrentServer().ServerUUID)
+				}
+			}
+		}
 	} else {
-		val, ok := selection.Data.(string)
-		if ok {
+		if val, ok := selection.Data.(string); ok {
 			config.SetActiveServer(val)
 		} else {
 			printline(fancy.Caution("That selection doesn't seem to be valid. This should be reported", nil))

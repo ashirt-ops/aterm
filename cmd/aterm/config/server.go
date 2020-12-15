@@ -122,6 +122,9 @@ func GetIDSortedServers() []common.Server {
 func getSortedServers(compareServers func(a, b common.Server) bool) []common.Server {
 	foundServers := make([]common.Server, 0, len(knownServers))
 	for _, server := range knownServers {
+		if server == common.NoServer {
+			continue // skip any servers that are fake
+		}
 		foundServers = append(foundServers, server)
 	}
 	sort.Slice(foundServers, func(i, j int) bool {
@@ -137,6 +140,18 @@ func GetServer(uuid string) common.Server {
 		return s
 	}
 	return common.NoServer
+}
+
+// GetServerCount returns the number of servers currently known to the application
+func GetServerCount() int {
+	i := 0
+	// filter out non-servers
+	for _, v := range knownServers {
+		if v != common.NoServer {
+			i++
+		}
+	}
+	return i
 }
 
 // GetCurrentServer is a helper to retrieve the server associated with the CurrenServerUUID.
@@ -218,4 +233,14 @@ func updateServer(server common.Server) error {
 	knownServers[server.ServerUUID] = server
 	loadedConnections.Servers = GetIDSortedServers()
 	return nil
+}
+
+// DeleteServer removes a server from the list of known servers
+func DeleteServer(serverUUID string) error {
+	if _, ok := knownServers[serverUUID]; !ok {
+		return errors.ErrServerNotFound
+	}
+	knownServers[serverUUID] = common.NoServer
+	loadedConnections.Servers = GetIDSortedServers()
+	return writeServers(loadedConnections)
 }
