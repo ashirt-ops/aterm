@@ -38,7 +38,7 @@ func askFor(msg AskForTemplateFields, guessValue *string, bailFunc func()) dialo
 	return queryWithDefault(msg.Prompt, guessValue, bailFunc)
 }
 
-// thisOrThat provides a mechansim to return either the provided "this", or if nil (or empty string), 
+// thisOrThat provides a mechansim to return either the provided "this", or if nil (or empty string),
 // the provided "that", converted to a string pointer
 func thisOrThat(this *string, that string) *string {
 	if this == nil || *this == "" {
