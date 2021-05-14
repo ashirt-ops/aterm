@@ -126,7 +126,7 @@ jobs:
       - name: Produce Zip
         run: zip -r aterm-${{ env.version }}-${{ matrix.platform }}.zip aterm-${{ env.version }}-${{ matrix.platform }}
       - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+        uses: actions/upload-release-asset@v1.0.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
