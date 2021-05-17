@@ -4,7 +4,7 @@ go 1.14
 
 require (
 	github.com/OpenPeeDeeP/xdg v1.0.0
-	github.com/creack/pty v1.1.11
+	github.com/creack/pty v1.1.12
 	github.com/google/go-github/v32 v32.1.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jonboulle/clockwork v0.2.2
