@@ -2,11 +2,11 @@ name: ci
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
     tags:
       'v*'
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   # This is a super hacky way to get this into a place that can actually be
@@ -29,7 +29,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        go-version: ['1.16']
+        go-version: ['1.17']
       fail-fast: false
     runs-on: ${{ matrix.os }}
 
