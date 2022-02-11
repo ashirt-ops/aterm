@@ -2,11 +2,11 @@ name: ci
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
     tags:
       'v*'
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   # This is a super hacky way to get this into a place that can actually be
@@ -29,7 +29,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        go-version: ['1.16']
+        go-version: ['1.17']
       fail-fast: false
     runs-on: ${{ matrix.os }}
 
@@ -85,7 +85,7 @@ jobs:
     - name: Import Code-Signing Certificates
       if: |
         matrix.os == 'macos-latest' &&
-        (contains(github.ref, 'tags/v') || github.ref == 'refs/heads/master' || contains(github.ref, 'refs/heads/release'))
+        (contains(github.ref, 'tags/v') || github.ref == 'refs/heads/main' || contains(github.ref, 'refs/heads/release'))
       uses: Apple-Actions/import-codesign-certs@v1.0.4
       with:
         p12-file-base64: ${{ secrets.MACOS_CERT }}
@@ -94,7 +94,7 @@ jobs:
     - name: Install gon via HomeBrew and Notarize (mac)
       if: |
         matrix.os == 'macos-latest' &&
-        (contains(github.ref, 'tags/v') || github.ref == 'refs/heads/master' || contains(github.ref, 'refs/heads/release'))
+        (contains(github.ref, 'tags/v') || github.ref == 'refs/heads/main' || contains(github.ref, 'refs/heads/release'))
       env:
         GON_CONF: ${{ secrets.GON_CONF }}
       run: |
