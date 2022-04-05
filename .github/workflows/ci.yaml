@@ -29,7 +29,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        go-version: ['1.17']
+        go-version: ['1.18']
       fail-fast: false
     runs-on: ${{ matrix.os }}
 
@@ -45,7 +45,7 @@ jobs:
 
     - name: Install go tools
       run: |
-        go get golang.org/x/lint/golint
+        go install golang.org/x/lint/golint@latest
 
     - name: Check out code into the Go module directory
       uses: actions/checkout@v3 
