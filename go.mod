@@ -11,7 +11,7 @@ require (
 	github.com/jrozner/go-info v0.0.0-20200923180815-246aef93e85e
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/manifoldco/promptui v0.9.0
-	github.com/stretchr/testify v1.7.1
+	github.com/stretchr/testify v1.8.0
 	github.com/theparanoids/ashirt-server v0.0.0-20220217184255-6045890052c1
 	golang.org/x/crypto v0.0.0-20220214200702-86341886e292
 	gopkg.in/yaml.v2 v2.4.0
@@ -26,5 +26,5 @@ require (
 	golang.org/x/sys v0.0.0-20220209214540-3681064d5158 // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
