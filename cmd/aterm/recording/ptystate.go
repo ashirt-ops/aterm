@@ -26,9 +26,13 @@ type PtyTracker struct {
 
 // NewPtyTracker generates an initial tracker.
 // termOut io.Writer // The writer that will be used to output events to what would be considered stdout
-//                   // Note: In many cases, you will want to pass a multiplexed writer (see io.MultiWriter)
+//
+//	// Note: In many cases, you will want to pass a multiplexed writer (see io.MultiWriter)
+//
 // readOut io.Writer // A writer that will forward along stdin events. This is the result of calling io.TeeReader.
-//                   // Note: if you are not interested in receiving stdin events, send along a io.Discard / no-op writer
+//
+//	// Note: if you are not interested in receiving stdin events, send along a io.Discard / no-op writer
+//
 // onReady func()    // A hook into the run state that provides a pre-recording area to display messages
 //
 // Note: This method assumes all inputs come from stdin. This will adjust the stdin on the calling terminal

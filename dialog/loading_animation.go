@@ -15,7 +15,7 @@ import (
 // ShowLoadingAnimation presents the given text plus a looping dot animation.
 // Should be called as a goroutine, otherwise this is likely to be an infinite loop
 //
-// To stop, set the stopCheck parameter to true
+// # To stop, set the stopCheck parameter to true
 //
 // A common solution can be used with the DoBackgroundLoading function
 func ShowLoadingAnimation(text string, stopCheck *bool) {

@@ -35,7 +35,8 @@ var ErrNotInitialized = errors.New("Recordings have not been initialized")
 // Shell: What shell to use for the PTY
 // EventMiddleware: How to transform events that come through
 // OnRecordingStart: A hook into the recording process just before actual recording starts
-//   This is intended allow the user to provide messaging to the user
+//
+//	This is intended allow the user to provide messaging to the user
 type RecordingInput struct {
 	FileName         string
 	FileDir          string
