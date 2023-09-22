@@ -48,7 +48,7 @@ jobs:
         go install golang.org/x/lint/golint@latest
 
     - name: Check out code into the Go module directory
-      uses: actions/checkout@v3 
+      uses: actions/checkout@v4 
     - name: Build Repo
       run: go build -v ./...
 
