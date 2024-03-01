@@ -13,7 +13,7 @@ require (
 	github.com/manifoldco/promptui v0.9.0
 	github.com/stretchr/testify v1.8.4
 	github.com/theparanoids/ashirt-server v0.0.0-20220217184255-6045890052c1
-	golang.org/x/crypto v0.19.0
+	golang.org/x/crypto v0.20.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
