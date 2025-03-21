@@ -86,7 +86,7 @@ jobs:
       if: |
         matrix.os == 'macos-latest' &&
         (contains(github.ref, 'tags/v') || github.ref == 'refs/heads/main' || contains(github.ref, 'refs/heads/release'))
-      uses: Apple-Actions/import-codesign-certs@v3
+      uses: Apple-Actions/import-codesign-certs@v4
       with:
         p12-file-base64: ${{ secrets.MACOS_CERT }}
         p12-password: ${{ secrets.MACOS_PASS }}
