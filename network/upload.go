@@ -98,7 +98,7 @@ func UploadToAshirt(ui UploadInput) (*dtos.Evidence, error) {
 		if !ok {
 			reason = "(unknown server error)"
 		}
-		return nil, fmt.Errorf("Unable to upload file: " + reason)
+		return nil, fmt.Errorf("Unable to upload file: %s", reason)
 	}
 	var evi dtos.Evidence
 	return &evi, errors.MaybeWrap(readResponseBody(&evi, resp.Body), "Upload success, but unable to parse response")

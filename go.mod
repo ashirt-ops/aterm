@@ -1,6 +1,6 @@
 module github.com/theparanoids/aterm
 
-go 1.23.0
+go 1.25.0
 
 require (
 	github.com/OpenPeeDeeP/xdg v1.0.0
