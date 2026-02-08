@@ -12,7 +12,7 @@ import (
 	"github.com/theparanoids/aterm/write"
 )
 
-func makeStreamingRecorder() (StreamingRecorder, write.SaveTermWriter, clockwork.FakeClock) {
+func makeStreamingRecorder() (StreamingRecorder, write.SaveTermWriter, *clockwork.FakeClock) {
 	clock := clockwork.NewFakeClock()
 	writer := write.NewSaveTermWrier()
 	return NewStreamingRecorder(writer, clock, "someShell"), writer, clock
