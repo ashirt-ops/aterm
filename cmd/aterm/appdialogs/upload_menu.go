@@ -232,12 +232,12 @@ func askForTags(operationSlug string, allTags []dtos.Tag, selectedTagIDs []int64
 			if err != nil {
 				if err == ErrCancelled {
 					printline("Tag creation cancelled")
-				} else if err == ErrAlreadyExists {
+				} else if err == ErrAlreadyExists && newTag != nil {
 					toggleValue(&selectedTagIDs, newTag.ID)
-				} else {
+				} else if err != ErrAlreadyExists {
 					printfln("Unable to create tag. Error: %v", err.Error())
 				}
-			} else {
+			} else if newTag != nil {
 				allTags = append(allTags, *newTag)
 				selectedTagIDs = append(selectedTagIDs, newTag.ID)
 			}
