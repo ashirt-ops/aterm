@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/creack/pty"
@@ -48,6 +49,7 @@ func (t *PtyTracker) Run(shell string) error {
 	defer t.close()
 
 	c := exec.Command(shell)
+	c.Env = filterSensitiveEnv(os.Environ())
 	var err error
 	t.Pty, err = pty.Start(c)
 	if err != nil {
@@ -73,6 +75,17 @@ func (t *PtyTracker) close() {
 	if t.Pty != nil {
 		t.Pty.Close()
 	}
+}
+
+func filterSensitiveEnv(environ []string) []string {
+	filtered := make([]string, 0, len(environ))
+	for _, env := range environ {
+		if !strings.HasPrefix(env, "ASHIRT_TERM_RECORDER_ACCESS_KEY=") &&
+			!strings.HasPrefix(env, "ASHIRT_TERM_RECORDER_SECRET_KEY=") {
+			filtered = append(filtered, env)
+		}
+	}
+	return filtered
 }
 
 func startResizeListener(ptmx *os.File) chan os.Signal {
