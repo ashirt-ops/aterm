@@ -91,7 +91,7 @@ func renameRecording(metadata RecordingMetadata) RecordingMetadata {
 	} else if resp.Err != nil {
 		printline(fancy.Fatal("Unable to move file", resp.Err))
 	} else if resp.SafeValue() != originalName {
-		filename := resp.SafeValue()
+		filename := filepath.Base(resp.SafeValue())
 		if !strings.HasSuffix(filename, ".cast") {
 			filename += ".cast"
 		}
