@@ -66,13 +66,13 @@ func ParseConfigNoOverrides() (TermRecorderConfig, error) {
 
 func parseConfigFile(cfg *TermRecorderConfig) error {
 	f, err := os.Open(ATermConfigPath())
-	defer f.Close()
 	if err != nil {
 		if os.IsNotExist(err) {
 			return ErrConfigFileDoesNotExist
 		}
 		return errors.Wrap(err, "Unable to read config file")
 	}
+	defer f.Close()
 	return cfg.parseFileContent(f)
 }
 
