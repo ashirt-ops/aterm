@@ -162,8 +162,8 @@ func CloneLoadedConfigAsOverrides() TermRecorderConfigOverrides {
 }
 
 func (t *TermRecorderConfig) WriteConfigToFile(configFilePath string) error {
-	os.MkdirAll(path.Dir(configFilePath), 0755)
-	outFile, err := os.Create(configFilePath)
+	os.MkdirAll(path.Dir(configFilePath), 0700)
+	outFile, err := os.OpenFile(configFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return errors.Wrap(err, "Unable to create config file")
 	}
