@@ -14,7 +14,9 @@ import (
 	"github.com/theparanoids/aterm/errors"
 )
 
-var client = &http.Client{}
+var client = &http.Client{
+	Timeout: 30 * time.Second,
+}
 
 var apiURL string
 var accessKey string
