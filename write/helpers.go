@@ -11,7 +11,7 @@ import (
 // This file will be prefixed with "recording_". Under the hood, uses ioutil.TempFile in this case.
 func NewFile(dir, name string) (*os.File, error) {
 	var realFile *os.File
-	err := os.MkdirAll(dir, 0775)
+	err := os.MkdirAll(dir, 0700)
 	if err != nil {
 		return nil, err
 	}
@@ -20,7 +20,7 @@ func NewFile(dir, name string) (*os.File, error) {
 		realFile, err = ioutil.TempFile(dir, "recording_*.cast")
 	} else {
 		filename := filepath.Join(dir, name)
-		realFile, err = os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+		realFile, err = os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	}
 
 	return realFile, err
