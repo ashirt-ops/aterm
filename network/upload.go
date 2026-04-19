@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 
 	"github.com/theparanoids/ashirt-server/backend/dtos"
 	"github.com/theparanoids/aterm/errors"
@@ -39,7 +40,7 @@ const ErrCouldNotInitMsg = "Unable to initialize Request"
 // UploadToAshirt uploads a terminal recording to the AShirt service. The remote service must
 // be configured by calling network.SetBaseURL(string) before uploading.
 func UploadToAshirt(ui UploadInput) (*dtos.Evidence, error) {
-	url := apiURL + "/operations/" + ui.OperationSlug + "/evidence"
+	url := apiURL + "/operations/" + url.PathEscape(ui.OperationSlug) + "/evidence"
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 	jsonTags, _ := json.Marshal(ui.TagIDs)
