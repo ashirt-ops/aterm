@@ -85,7 +85,7 @@ func UploadToAshirt(ui UploadInput) (*dtos.Evidence, error) {
 	}
 	if resp.StatusCode != 201 {
 		defer resp.Body.Close()
-		raw, err := ioutil.ReadAll(resp.Body)
+		raw, err := ioutil.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 		if err != nil {
 			return nil, errors.Wrap(err, "Server did not accept request: Unable to read error response")
 		}

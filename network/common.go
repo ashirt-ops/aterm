@@ -16,6 +16,8 @@ import (
 
 var client = &http.Client{}
 
+const maxResponseSize = 10 * 1024 * 1024
+
 var apiURL string
 var accessKey string
 var secretKey []byte
@@ -76,7 +78,7 @@ func evaluateResponseStatusCode(code int) error {
 }
 
 func readResponseBody(container interface{}, body io.Reader) error {
-	content, err := ioutil.ReadAll(body)
+	content, err := ioutil.ReadAll(io.LimitReader(body, maxResponseSize))
 	if err != nil {
 		return errors.Wrap(err, "Unable to read response")
 	}
