@@ -148,9 +148,107 @@ pub fn dispatch_main_menu(label: &str) -> Option<MenuAction> {
         .map(|item| item.action)
 }
 
+/// A free-text configuration field the settings menu can edit in place.
+///
+/// These mirror the editable values in the Go aterm "Update Settings" guide.
+/// Each variant knows how to read its current value from a [`Config`], write a
+/// new value back, and whether it must be masked ([`SettingsField::is_secret`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsField {
+    /// `apiURL` — base URL of the ASHIRT API.
+    ApiUrl,
+    /// `accessKey` — API access key.
+    AccessKey,
+    /// `secretKey` — API secret key (masked).
+    SecretKey,
+    /// `outputDir` — base directory recordings are written to.
+    OutputDir,
+    /// `operationSlug` — operation slug to record against.
+    OperationSlug,
+    /// `recordingShell` — shell launched when recording.
+    RecordingShell,
+}
+
+impl SettingsField {
+    /// Every editable field, in the order they appear in the settings menu.
+    pub const ALL: &'static [SettingsField] = &[
+        SettingsField::ApiUrl,
+        SettingsField::AccessKey,
+        SettingsField::SecretKey,
+        SettingsField::OutputDir,
+        SettingsField::OperationSlug,
+        SettingsField::RecordingShell,
+    ];
+
+    /// The human-readable name used in menu labels and prompts.
+    pub fn display_name(self) -> &'static str {
+        match self {
+            SettingsField::ApiUrl => "API URL",
+            SettingsField::AccessKey => "Access Key",
+            SettingsField::SecretKey => "Secret Key",
+            SettingsField::OutputDir => "Output Directory",
+            SettingsField::OperationSlug => "Operation Slug",
+            SettingsField::RecordingShell => "Recording Shell",
+        }
+    }
+
+    /// Whether this field holds a secret that must be masked (entered via a
+    /// hidden password prompt and never echoed in a label).
+    pub fn is_secret(self) -> bool {
+        matches!(self, SettingsField::SecretKey)
+    }
+
+    /// Reads this field's current value from `cfg`.
+    pub fn current_value(self, cfg: &Config) -> &str {
+        match self {
+            SettingsField::ApiUrl => &cfg.api_url,
+            SettingsField::AccessKey => &cfg.access_key,
+            SettingsField::SecretKey => &cfg.secret_key,
+            SettingsField::OutputDir => &cfg.output_dir,
+            SettingsField::OperationSlug => &cfg.operation_slug,
+            SettingsField::RecordingShell => &cfg.recording_shell,
+        }
+    }
+
+    /// Writes `value` into this field of `cfg`. This is the pure
+    /// "apply-value-to-Config per field" half of an edit; persistence and
+    /// rollback live in the interactive flow.
+    pub fn apply(self, cfg: &mut Config, value: String) {
+        match self {
+            SettingsField::ApiUrl => cfg.api_url = value,
+            SettingsField::AccessKey => cfg.access_key = value,
+            SettingsField::SecretKey => cfg.secret_key = value,
+            SettingsField::OutputDir => cfg.output_dir = value,
+            SettingsField::OperationSlug => cfg.operation_slug = value,
+            SettingsField::RecordingShell => cfg.recording_shell = value,
+        }
+    }
+
+    /// Builds this field's settings-menu label for the current config state:
+    /// `"<name>: <value>"`, with an empty value shown as `(not set)` and a
+    /// secret shown only as `(set)`/`(not set)` so it is never echoed.
+    pub fn label(self, cfg: &Config) -> String {
+        let name = self.display_name();
+        if self.is_secret() {
+            let state = if self.current_value(cfg).is_empty() {
+                "(not set)"
+            } else {
+                "(set)"
+            };
+            format!("{name}: {state}")
+        } else {
+            let value = self.current_value(cfg);
+            let shown = if value.is_empty() { "(not set)" } else { value };
+            format!("{name}: {shown}")
+        }
+    }
+}
+
 /// An action the settings menu can dispatch to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsAction {
+    /// Edit a free-text/secret configuration field in place.
+    EditField(SettingsField),
     /// Toggle the startup auto-update check on/off.
     ToggleAutoUpdateCheck,
     /// Return to the main menu.
@@ -170,24 +268,37 @@ pub fn auto_update_toggle_label(enabled: bool) -> String {
     )
 }
 
-/// The settings-menu labels, in display order, for the current config state.
+/// The settings-menu labels, in display order, for the current config state:
+/// every editable field, then the auto-update toggle, then the back entry.
 pub fn settings_menu_labels(config: &Config) -> Vec<String> {
-    vec![
-        auto_update_toggle_label(config.auto_update_check),
-        SETTINGS_BACK_LABEL.to_string(),
-    ]
+    let mut labels: Vec<String> = SettingsField::ALL
+        .iter()
+        .map(|&field| field.label(config))
+        .collect();
+    labels.push(auto_update_toggle_label(config.auto_update_check));
+    labels.push(SETTINGS_BACK_LABEL.to_string());
+    labels
 }
 
 /// Maps a selected settings-menu label back to its [`SettingsAction`].
 ///
-/// The toggle label is dynamic (it carries the current state), so anything that
-/// is not the fixed back entry is treated as the toggle.
-pub fn dispatch_settings_menu(label: &str) -> SettingsAction {
+/// Matching is exhaustive over the labels [`settings_menu_labels`] produces for
+/// `config`: the fixed back entry, the dynamic auto-update toggle (compared
+/// against its rendering for the current state), and each editable field's
+/// label. An unrecognized label returns `None` rather than being coerced into a
+/// real action — the select prompt only ever returns a label we supplied, so
+/// this is purely defensive.
+pub fn dispatch_settings_menu(config: &Config, label: &str) -> Option<SettingsAction> {
     if label == SETTINGS_BACK_LABEL {
-        SettingsAction::Back
-    } else {
-        SettingsAction::ToggleAutoUpdateCheck
+        return Some(SettingsAction::Back);
     }
+    if label == auto_update_toggle_label(config.auto_update_check) {
+        return Some(SettingsAction::ToggleAutoUpdateCheck);
+    }
+    SettingsField::ALL
+        .iter()
+        .find(|&&field| field.label(config) == label)
+        .map(|&field| SettingsAction::EditField(field))
 }
 
 /// One selectable operation in the operation-selection prompt: the display label
@@ -336,13 +447,15 @@ pub fn run(config: &mut Config, client: &Client) -> Result<(), MenuError> {
 }
 
 /// Runs the in-app settings menu, letting the user edit and persist
-/// configuration. Currently exposes a single toggle for the startup auto-update
-/// check (gh-104); each change is written back via [`Config::write`] so it
-/// survives the next launch.
+/// configuration: the API URL / access key / secret key / output directory /
+/// operation slug / recording shell, plus the startup auto-update toggle
+/// (gh-104). Each change is written back via [`Config::write`] so it survives
+/// the next launch, mirroring the Go "Update Settings" flow.
 ///
-/// MANUAL/TTY-ONLY: drives `inquire` select prompts; the toggle/dispatch logic
-/// it relies on ([`settings_menu_labels`], [`dispatch_settings_menu`]) is pure
-/// and unit-tested. Backing out (Esc / Ctrl-C) or "Back" returns to the caller.
+/// MANUAL/TTY-ONLY: drives `inquire` select/text/password prompts; the
+/// label/dispatch/apply logic it relies on ([`settings_menu_labels`],
+/// [`dispatch_settings_menu`], [`SettingsField::apply`]) is pure and
+/// unit-tested. Backing out (Esc / Ctrl-C) or "Back" returns to the caller.
 pub fn settings_menu(config: &mut Config) -> Result<(), MenuError> {
     loop {
         let labels = settings_menu_labels(config);
@@ -353,8 +466,9 @@ pub fn settings_menu(config: &mut Config) -> Result<(), MenuError> {
             Err(err) => return Err(err.into()),
         };
 
-        match dispatch_settings_menu(&selection) {
-            SettingsAction::ToggleAutoUpdateCheck => {
+        match dispatch_settings_menu(config, &selection) {
+            Some(SettingsAction::EditField(field)) => edit_field(config, field)?,
+            Some(SettingsAction::ToggleAutoUpdateCheck) => {
                 config.auto_update_check = !config.auto_update_check;
                 // Persist immediately so the choice survives a restart.
                 match config.write() {
@@ -374,7 +488,64 @@ pub fn settings_menu(config: &mut Config) -> Result<(), MenuError> {
                     }
                 }
             }
-            SettingsAction::Back => break,
+            Some(SettingsAction::Back) => break,
+            // The select prompt only returns labels we supplied; ignore anything
+            // unexpected rather than coercing it into an edit.
+            None => eprintln!("Unrecognized settings selection: {selection}"),
+        }
+    }
+
+    Ok(())
+}
+
+/// Prompts for a new value for `field`, persists it via [`Config::write`], and
+/// re-validates — rolling the in-memory value back on a write failure and only
+/// warning (never blocking the save) when validation finds a problem.
+///
+/// MANUAL/TTY-ONLY: drives `inquire` text/password prompts. Backing out of the
+/// edit prompt (Esc / Ctrl-C) leaves the field unchanged and returns to the
+/// settings menu. The secret field is entered via a masked prompt that cannot
+/// be pre-seeded, so an empty entry is treated as "leave unchanged" rather than
+/// clearing the stored secret (mirroring the first-run wizard).
+fn edit_field(config: &mut Config, field: SettingsField) -> Result<(), MenuError> {
+    let name = field.display_name();
+
+    let entered = if field.is_secret() {
+        match tui::password(name) {
+            Ok(value) => value,
+            Err(TuiError::Cancelled) | Err(TuiError::Interrupted) => return Ok(()),
+            Err(err) => return Err(err.into()),
+        }
+    } else {
+        let current = field.current_value(config).to_string();
+        match tui::input_with_default(name, &current) {
+            Ok(value) => value,
+            Err(TuiError::Cancelled) | Err(TuiError::Interrupted) => return Ok(()),
+            Err(err) => return Err(err.into()),
+        }
+    };
+
+    // A masked secret cannot be pre-filled, so an empty entry means "no change".
+    if field.is_secret() && entered.is_empty() {
+        println!("{name} left unchanged.");
+        return Ok(());
+    }
+
+    let previous = field.current_value(config).to_string();
+    field.apply(config, entered);
+    match config.write() {
+        Ok(()) => {
+            println!("{name} updated.");
+            // Save first, then warn (mirror Go): a bad value is persisted but the
+            // user is told about any problems it introduces.
+            if let Err(problems) = crate::config_setup::validate(config) {
+                eprintln!("Saved, but the configuration still has problems:\n{problems}");
+            }
+        }
+        Err(err) => {
+            // Roll back so the menu keeps showing the actual persisted state.
+            field.apply(config, previous);
+            eprintln!("Failed to save configuration: {err}");
         }
     }
 
@@ -528,42 +699,148 @@ mod tests {
     }
 
     #[test]
-    fn settings_menu_labels_lead_with_toggle_and_end_with_back() {
-        let mut cfg = Config::with_defaults();
+    fn settings_menu_labels_list_fields_then_toggle_then_back() {
+        let cfg = Config::with_defaults();
         let labels = settings_menu_labels(&cfg);
-        assert_eq!(labels[0], auto_update_toggle_label(true));
-        assert_eq!(labels.last().unwrap(), "Back to main menu");
 
+        // One label per editable field, in order, then the toggle, then back.
+        let expected_fields: Vec<String> =
+            SettingsField::ALL.iter().map(|f| f.label(&cfg)).collect();
+        assert_eq!(&labels[..SettingsField::ALL.len()], &expected_fields[..]);
+        assert_eq!(
+            labels[SettingsField::ALL.len()],
+            auto_update_toggle_label(cfg.auto_update_check)
+        );
+        assert_eq!(labels.last().unwrap(), "Back to main menu");
+        assert_eq!(labels.len(), SettingsField::ALL.len() + 2);
+    }
+
+    #[test]
+    fn settings_menu_labels_track_toggle_state() {
+        let mut cfg = Config::with_defaults();
+        assert!(
+            settings_menu_labels(&cfg).contains(&auto_update_toggle_label(true)),
+            "enabled toggle label present"
+        );
         cfg.auto_update_check = false;
-        let labels = settings_menu_labels(&cfg);
-        assert_eq!(labels[0], auto_update_toggle_label(false));
+        assert!(
+            settings_menu_labels(&cfg).contains(&auto_update_toggle_label(false)),
+            "disabled toggle label present"
+        );
+    }
+
+    #[test]
+    fn settings_field_label_masks_secret_and_marks_empty() {
+        let mut cfg = Config::with_defaults();
+        cfg.api_url = "https://ashirt.example".to_string();
+        cfg.secret_key = "c2VjcmV0".to_string();
+        cfg.operation_slug = String::new();
+
+        assert_eq!(
+            SettingsField::ApiUrl.label(&cfg),
+            "API URL: https://ashirt.example"
+        );
+        // A set secret shows "(set)" and never echoes the value.
+        let secret_label = SettingsField::SecretKey.label(&cfg);
+        assert_eq!(secret_label, "Secret Key: (set)");
+        assert!(!secret_label.contains("c2VjcmV0"));
+        // An empty field is shown as "(not set)".
+        assert_eq!(
+            SettingsField::OperationSlug.label(&cfg),
+            "Operation Slug: (not set)"
+        );
+
+        cfg.secret_key = String::new();
+        assert_eq!(
+            SettingsField::SecretKey.label(&cfg),
+            "Secret Key: (not set)"
+        );
+    }
+
+    #[test]
+    fn settings_field_apply_sets_only_its_own_field() {
+        let mut cfg = Config::with_defaults();
+        SettingsField::ApiUrl.apply(&mut cfg, "https://api.example".to_string());
+        SettingsField::AccessKey.apply(&mut cfg, "AKID".to_string());
+        SettingsField::SecretKey.apply(&mut cfg, "c2VjcmV0".to_string());
+        SettingsField::OutputDir.apply(&mut cfg, "/tmp/out".to_string());
+        SettingsField::OperationSlug.apply(&mut cfg, "op".to_string());
+        SettingsField::RecordingShell.apply(&mut cfg, "/bin/zsh".to_string());
+
+        assert_eq!(cfg.api_url, "https://api.example");
+        assert_eq!(cfg.access_key, "AKID");
+        assert_eq!(cfg.secret_key, "c2VjcmV0");
+        assert_eq!(cfg.output_dir, "/tmp/out");
+        assert_eq!(cfg.operation_slug, "op");
+        assert_eq!(cfg.recording_shell, "/bin/zsh");
+    }
+
+    #[test]
+    fn settings_field_current_value_round_trips_apply() {
+        for &field in SettingsField::ALL {
+            let mut cfg = Config::with_defaults();
+            field.apply(&mut cfg, "edited-value".to_string());
+            assert_eq!(field.current_value(&cfg), "edited-value");
+        }
+    }
+
+    #[test]
+    fn only_secret_key_field_is_secret() {
+        for &field in SettingsField::ALL {
+            assert_eq!(
+                field.is_secret(),
+                field == SettingsField::SecretKey,
+                "{field:?} secret-ness"
+            );
+        }
     }
 
     #[test]
     fn dispatch_settings_menu_maps_back_and_toggle() {
+        let cfg = Config::with_defaults();
         assert_eq!(
-            dispatch_settings_menu("Back to main menu"),
-            SettingsAction::Back
+            dispatch_settings_menu(&cfg, "Back to main menu"),
+            Some(SettingsAction::Back)
         );
-        // Either rendering of the dynamic toggle label maps to the toggle action.
+        // The toggle label for the current state maps to the toggle action.
         assert_eq!(
-            dispatch_settings_menu(&auto_update_toggle_label(true)),
-            SettingsAction::ToggleAutoUpdateCheck
-        );
-        assert_eq!(
-            dispatch_settings_menu(&auto_update_toggle_label(false)),
-            SettingsAction::ToggleAutoUpdateCheck
+            dispatch_settings_menu(&cfg, &auto_update_toggle_label(cfg.auto_update_check)),
+            Some(SettingsAction::ToggleAutoUpdateCheck)
         );
     }
 
     #[test]
-    fn settings_toggle_label_round_trips_through_dispatch() {
-        // The label the prompt would show for each state dispatches to the toggle.
-        for enabled in [true, false] {
-            let label = auto_update_toggle_label(enabled);
+    fn dispatch_settings_menu_maps_each_field_label() {
+        let mut cfg = Config::with_defaults();
+        cfg.api_url = "https://ashirt.example".to_string();
+        cfg.secret_key = "c2VjcmV0".to_string();
+        for &field in SettingsField::ALL {
             assert_eq!(
-                dispatch_settings_menu(&label),
-                SettingsAction::ToggleAutoUpdateCheck
+                dispatch_settings_menu(&cfg, &field.label(&cfg)),
+                Some(SettingsAction::EditField(field)),
+                "{field:?} label dispatch"
+            );
+        }
+    }
+
+    #[test]
+    fn dispatch_settings_menu_rejects_unknown_label() {
+        let cfg = Config::with_defaults();
+        assert_eq!(dispatch_settings_menu(&cfg, "Nope"), None);
+        assert_eq!(dispatch_settings_menu(&cfg, ""), None);
+    }
+
+    #[test]
+    fn every_settings_label_round_trips_through_dispatch() {
+        // Guards against drift between the label list and dispatch: every label
+        // the menu would show maps to some action.
+        let mut cfg = Config::with_defaults();
+        cfg.api_url = "https://ashirt.example".to_string();
+        cfg.secret_key = "c2VjcmV0".to_string();
+        for label in settings_menu_labels(&cfg) {
+            assert!(
+                dispatch_settings_menu(&cfg, &label).is_some(),
+                "label {label:?} did not dispatch"
             );
         }
     }
