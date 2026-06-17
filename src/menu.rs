@@ -1,0 +1,518 @@
+//! Main menu + recording entry flow.
+//!
+//! This is the Rust replacement for the Go `appdialogs/main_menu.go` plus the
+//! recording-start path (`recording/start_recording.go`). It ties together the
+//! existing building blocks:
+//!   * [`crate::tui`] — the searchable-select menu primitive;
+//!   * [`crate::ashirt::ops_tags::list_operations`] — operation selection;
+//!   * [`crate::config`] — output directory / file name / shell;
+//!   * [`crate::recorder::record_session`] — the actual recording.
+//!
+//! # Two distinct phases
+//!
+//! The menu and the recording are kept as **separate phases**: the menu prompts
+//! run to completion, then [`record_session`] takes over the terminal (raw mode)
+//! for the duration of the recording, then control returns to the menu loop.
+//! There is no persistent stdin router straddling both phases (the Go
+//! `copyRouter` hack); [`record_session`] owns stdin only while it runs and
+//! releases it cleanly on child exit.
+//!
+//! # Headless gate
+//!
+//! Interactive prompts (`inquire`) and the recorder both need a real TTY, so
+//! they can never run in CI. To keep this module testable, ALL decision logic is
+//! factored into the pure functions below — menu-item/action mapping
+//! ([`dispatch_main_menu`], [`MAIN_MENU`]), operation → choice construction
+//! ([`operation_choices`]), and recording output-path construction
+//! ([`output_path`], [`resolve_output_file_name`]) — and unit-tested without a
+//! terminal. The interactive [`run`] entry point and [`start_recording`] wire
+//! those pure pieces into `tui`/`recorder` and are never exercised by tests.
+
+use std::collections::hash_map::RandomState;
+use std::fs::{self, OpenOptions};
+use std::hash::{BuildHasher, Hasher};
+use std::io::BufWriter;
+use std::path::{Path, PathBuf};
+
+use thiserror::Error;
+
+use crate::ashirt::http::{Client, HttpError};
+use crate::ashirt::ops_tags::{list_operations, Operation};
+use crate::ashirt::signing::Credentials;
+use crate::config::Config;
+use crate::recorder::{record_session, RecorderError};
+use crate::tui::{self, TuiError};
+
+/// Errors produced by the menu / recording flow.
+#[derive(Debug, Error)]
+pub enum MenuError {
+    /// Talking to the ASHIRT API (e.g. listing operations) failed.
+    #[error("ashirt request failed")]
+    Http(#[from] HttpError),
+
+    /// An interactive prompt failed (other than a user cancel/interrupt, which
+    /// the loop handles as "go back" / "quit" rather than an error).
+    #[error("menu prompt failed")]
+    Tui(#[from] TuiError),
+
+    /// The recording session itself failed.
+    #[error("recording failed")]
+    Recorder(#[from] RecorderError),
+
+    /// The recording output directory could not be created.
+    #[error("failed to create recording directory {path}")]
+    CreateDir {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// The recording output file could not be created.
+    #[error("failed to create recording file {path}")]
+    CreateFile {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+// ---------------------------------------------------------------------------
+// Pure logic (headless-testable). The interactive flow below delegates here.
+// ---------------------------------------------------------------------------
+
+/// An action the main menu can dispatch to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuAction {
+    /// Pick an operation and record a session against it.
+    StartRecording,
+    /// Re-fetch the operations list from the server.
+    RefreshOperations,
+    /// Leave the application.
+    Quit,
+}
+
+/// A single main-menu entry: the label shown to the user and the action it maps
+/// to.
+#[derive(Debug, Clone, Copy)]
+pub struct MenuItem {
+    /// The text rendered in the select list.
+    pub label: &'static str,
+    /// The action taken when this entry is chosen.
+    pub action: MenuAction,
+}
+
+/// The main menu, in display order. Mirrors the core of the Go main menu, scoped
+/// to the building blocks this issue owns (recording + operations); config-edit
+/// and connection-test entries are left for later issues.
+pub const MAIN_MENU: &[MenuItem] = &[
+    MenuItem {
+        label: "Start recording",
+        action: MenuAction::StartRecording,
+    },
+    MenuItem {
+        label: "Refresh operations",
+        action: MenuAction::RefreshOperations,
+    },
+    MenuItem {
+        label: "Quit",
+        action: MenuAction::Quit,
+    },
+];
+
+/// The labels for [`MAIN_MENU`], in order — the input to the select prompt.
+pub fn main_menu_labels() -> Vec<String> {
+    MAIN_MENU
+        .iter()
+        .map(|item| item.label.to_string())
+        .collect()
+}
+
+/// Maps a selected main-menu label back to its [`MenuAction`].
+///
+/// Returns `None` for a label that is not in [`MAIN_MENU`] (defensive: the
+/// select prompt only ever returns one of the labels we supplied).
+pub fn dispatch_main_menu(label: &str) -> Option<MenuAction> {
+    MAIN_MENU
+        .iter()
+        .find(|item| item.label == label)
+        .map(|item| item.action)
+}
+
+/// One selectable operation in the operation-selection prompt: the display label
+/// and the slug it resolves to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OperationChoice {
+    /// Label shown in the select list (the operation name, with a `(Current)`
+    /// marker for the configured operation).
+    pub label: String,
+    /// The operation slug this choice records against.
+    pub slug: String,
+}
+
+/// Builds the operation-selection choices from the available operations.
+///
+/// Mirrors the Go `operationsToOptions`: the operation whose slug matches
+/// `current_slug` (the configured operation) is marked `(Current)` and moved to
+/// the front of the list so it is the default selection. When `current_slug` is
+/// empty or matches none of the operations, the list keeps its server order with
+/// no marker.
+pub fn operation_choices(ops: &[Operation], current_slug: &str) -> Vec<OperationChoice> {
+    let mut current_idx = None;
+    let mut choices: Vec<OperationChoice> = ops
+        .iter()
+        .enumerate()
+        .map(|(i, op)| {
+            let is_current = !current_slug.is_empty() && op.slug == current_slug;
+            if is_current {
+                current_idx = Some(i);
+            }
+            let label = if is_current {
+                format!("{} (Current)", op.name)
+            } else {
+                op.name.clone()
+            };
+            OperationChoice {
+                label,
+                slug: op.slug.clone(),
+            }
+        })
+        .collect();
+
+    // Promote the current operation to the front, preserving the relative order
+    // of the rest.
+    if let Some(idx) = current_idx {
+        let current = choices.remove(idx);
+        choices.insert(0, current);
+    }
+
+    choices
+}
+
+/// Finds the [`OperationChoice`] whose label matches the value the select prompt
+/// returned.
+pub fn find_operation_by_label<'a>(
+    choices: &'a [OperationChoice],
+    label: &str,
+) -> Option<&'a OperationChoice> {
+    choices.iter().find(|choice| choice.label == label)
+}
+
+/// Resolves the recording file name: the configured name if it has content,
+/// otherwise a generated default.
+///
+/// Mirrors the Go behaviour where an empty configured name falls back to a
+/// generated `recording_*.cast` file (Go used a temp file; we generate a
+/// process-random name to the same effect). Surrounding whitespace on a
+/// configured name is trimmed.
+pub fn resolve_output_file_name(configured: &str) -> String {
+    let trimmed = configured.trim();
+    if trimmed.is_empty() {
+        default_output_file_name()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Generates a default recording file name, `recording_<random>.cast`.
+///
+/// The random suffix keeps concurrent / repeated recordings from colliding (the
+/// output file is created with `create_new`). Like
+/// [`crate::ashirt::ops_tags::random_tag_color`], this seeds off [`RandomState`]
+/// rather than pulling in the `rand` crate for a single value.
+pub fn default_output_file_name() -> String {
+    let r = RandomState::new().build_hasher().finish();
+    format!("recording_{r:016x}.cast")
+}
+
+/// Constructs the recording output path: `<output_dir>/<slug>/<file_name>`.
+///
+/// This is the pure path-join half of the recording target; the directory is
+/// created and the file opened by [`start_recording`].
+pub fn output_path(output_dir: &str, slug: &str, file_name: &str) -> PathBuf {
+    Path::new(output_dir).join(slug).join(file_name)
+}
+
+// ---------------------------------------------------------------------------
+// Interactive flow. MANUAL/TTY-ONLY: never call from tests or any headless path
+// — the prompts and the recorder both require a real terminal.
+// ---------------------------------------------------------------------------
+
+/// Runs the main menu loop. This is the entry point the application entrypoint
+/// (aterm-8tn.14) calls after configuration is resolved.
+///
+/// Operations are fetched once up front (a failure is reported but non-fatal, so
+/// the menu still opens and the user can retry via "Refresh operations"). Each
+/// loop iteration prompts the main menu and dispatches the chosen action;
+/// recording returns here when it finishes, keeping menu and recording as
+/// separate phases. The loop exits on "Quit" or when the user cancels the menu
+/// prompt (Esc / Ctrl-C).
+pub fn run(config: &Config) -> Result<(), MenuError> {
+    let client = build_client(config)?;
+
+    let mut operations = match list_operations(&client) {
+        Ok(ops) => ops,
+        Err(err) => {
+            eprintln!("Unable to retrieve operations list: {err}");
+            Vec::new()
+        }
+    };
+
+    loop {
+        let labels = main_menu_labels();
+        let selection = match tui::select("What do you want to do?", &labels) {
+            Ok(selection) => selection,
+            // Treat an aborted menu prompt as "quit" rather than an error.
+            Err(TuiError::Cancelled) | Err(TuiError::Interrupted) => break,
+            Err(err) => return Err(err.into()),
+        };
+
+        match dispatch_main_menu(&selection) {
+            Some(MenuAction::StartRecording) => start_recording(config, &operations)?,
+            Some(MenuAction::RefreshOperations) => match list_operations(&client) {
+                Ok(ops) => {
+                    println!("Updated operations ({} total)", ops.len());
+                    operations = ops;
+                }
+                Err(err) => eprintln!("Unable to retrieve operations list: {err}"),
+            },
+            Some(MenuAction::Quit) => break,
+            None => eprintln!("Unrecognized menu selection: {selection}"),
+        }
+    }
+
+    Ok(())
+}
+
+/// Prompts for an operation and records a session against it, writing the cast
+/// to `<output_dir>/<slug>/<file_name>` and returning to the caller (the menu
+/// loop) when the recording finishes.
+fn start_recording(config: &Config, operations: &[Operation]) -> Result<(), MenuError> {
+    if operations.is_empty() {
+        println!("Unable to record: no operations available (try \"Refresh operations\").");
+        return Ok(());
+    }
+
+    let choices = operation_choices(operations, &config.operation_slug);
+    let labels: Vec<String> = choices.iter().map(|choice| choice.label.clone()).collect();
+
+    let selected = match tui::select("Select an operation", &labels) {
+        Ok(selected) => selected,
+        // Backing out of operation selection returns to the menu, not an error.
+        Err(TuiError::Cancelled) | Err(TuiError::Interrupted) => {
+            println!("Cancelled; returning to menu.");
+            return Ok(());
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    let slug = match find_operation_by_label(&choices, &selected) {
+        Some(choice) => choice.slug.clone(),
+        // The prompt only returns labels we supplied, so this is unreachable in
+        // practice; bail back to the menu rather than panic if it ever happens.
+        None => return Ok(()),
+    };
+
+    let file_name = resolve_output_file_name(&config.output_file_name);
+    let path = output_path(&config.output_dir, &slug, &file_name);
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| MenuError::CreateDir {
+            path: parent.to_path_buf(),
+            source,
+        })?;
+    }
+
+    // `create_new` mirrors the Go `O_EXCL`: never clobber an existing recording.
+    let file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .map_err(|source| MenuError::CreateFile {
+            path: path.clone(),
+            source,
+        })?;
+
+    println!("Recording to {}", path.display());
+    let code = record_session(&recording_shell(config), BufWriter::new(file))?;
+    println!(
+        "Recording finished (exit code {code}); saved to {}",
+        path.display()
+    );
+
+    Ok(())
+}
+
+/// Builds the ASHIRT API client from the resolved configuration.
+fn build_client(config: &Config) -> Result<Client, HttpError> {
+    let creds = Credentials {
+        access_key: config.access_key.clone(),
+        secret_key: config.secret_key.clone(),
+    };
+    Client::new(&config.api_url, creds)
+}
+
+/// Picks the shell to record: the configured shell, falling back to `$SHELL`,
+/// then `/bin/sh`. The configured value is normally already seeded from `$SHELL`
+/// by [`Config::with_defaults`]; this keeps a sensible last resort.
+fn recording_shell(config: &Config) -> String {
+    if !config.recording_shell.trim().is_empty() {
+        return config.recording_shell.clone();
+    }
+    match std::env::var("SHELL") {
+        Ok(shell) if !shell.trim().is_empty() => shell,
+        _ => "/bin/sh".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn op(slug: &str, name: &str) -> Operation {
+        Operation {
+            slug: slug.to_string(),
+            name: name.to_string(),
+            id: 0,
+            status: 0,
+            num_users: 0,
+        }
+    }
+
+    #[test]
+    fn main_menu_labels_match_items_in_order() {
+        let labels = main_menu_labels();
+        assert_eq!(labels, ["Start recording", "Refresh operations", "Quit"]);
+    }
+
+    #[test]
+    fn dispatch_main_menu_maps_each_label() {
+        assert_eq!(
+            dispatch_main_menu("Start recording"),
+            Some(MenuAction::StartRecording)
+        );
+        assert_eq!(
+            dispatch_main_menu("Refresh operations"),
+            Some(MenuAction::RefreshOperations)
+        );
+        assert_eq!(dispatch_main_menu("Quit"), Some(MenuAction::Quit));
+    }
+
+    #[test]
+    fn dispatch_main_menu_rejects_unknown_label() {
+        assert_eq!(dispatch_main_menu("Nope"), None);
+        assert_eq!(dispatch_main_menu(""), None);
+    }
+
+    #[test]
+    fn every_menu_label_round_trips_through_dispatch() {
+        // Guards against a label/action drift between the constant and dispatch.
+        for item in MAIN_MENU {
+            assert_eq!(dispatch_main_menu(item.label), Some(item.action));
+        }
+    }
+
+    #[test]
+    fn operation_choices_preserve_order_without_current() {
+        let ops = [op("s1", "Alpha"), op("s2", "Beta"), op("s3", "Gamma")];
+        let choices = operation_choices(&ops, "");
+        let labels: Vec<&str> = choices.iter().map(|c| c.label.as_str()).collect();
+        assert_eq!(labels, ["Alpha", "Beta", "Gamma"]);
+        let slugs: Vec<&str> = choices.iter().map(|c| c.slug.as_str()).collect();
+        assert_eq!(slugs, ["s1", "s2", "s3"]);
+    }
+
+    #[test]
+    fn operation_choices_promote_and_mark_current() {
+        let ops = [op("s1", "Alpha"), op("s2", "Beta"), op("s3", "Gamma")];
+        let choices = operation_choices(&ops, "s2");
+
+        // Current operation is first and marked.
+        assert_eq!(choices[0].slug, "s2");
+        assert_eq!(choices[0].label, "Beta (Current)");
+        // The rest keep their original relative order, unmarked.
+        let rest: Vec<&str> = choices[1..].iter().map(|c| c.label.as_str()).collect();
+        assert_eq!(rest, ["Alpha", "Gamma"]);
+    }
+
+    #[test]
+    fn operation_choices_unknown_current_slug_is_unmarked() {
+        let ops = [op("s1", "Alpha"), op("s2", "Beta")];
+        let choices = operation_choices(&ops, "missing");
+        let labels: Vec<&str> = choices.iter().map(|c| c.label.as_str()).collect();
+        assert_eq!(labels, ["Alpha", "Beta"]);
+        assert!(choices.iter().all(|c| !c.label.contains("(Current)")));
+    }
+
+    #[test]
+    fn operation_choices_empty_input_is_empty() {
+        assert!(operation_choices(&[], "s1").is_empty());
+    }
+
+    #[test]
+    fn find_operation_by_label_round_trips_selection() {
+        let ops = [op("s1", "Alpha"), op("s2", "Beta")];
+        let choices = operation_choices(&ops, "s2");
+        // The label the prompt would return for the current op maps back to its
+        // slug, including the "(Current)" marker.
+        let found = find_operation_by_label(&choices, "Beta (Current)").expect("label present");
+        assert_eq!(found.slug, "s2");
+        let found = find_operation_by_label(&choices, "Alpha").expect("label present");
+        assert_eq!(found.slug, "s1");
+    }
+
+    #[test]
+    fn find_operation_by_label_missing_is_none() {
+        let choices = operation_choices(&[op("s1", "Alpha")], "");
+        assert!(find_operation_by_label(&choices, "Beta").is_none());
+    }
+
+    #[test]
+    fn resolve_output_file_name_uses_configured_value() {
+        assert_eq!(resolve_output_file_name("session.cast"), "session.cast");
+    }
+
+    #[test]
+    fn resolve_output_file_name_trims_whitespace() {
+        assert_eq!(resolve_output_file_name("  session.cast  "), "session.cast");
+    }
+
+    #[test]
+    fn resolve_output_file_name_defaults_when_empty() {
+        let name = resolve_output_file_name("");
+        assert!(name.starts_with("recording_"), "got {name:?}");
+        assert!(name.ends_with(".cast"), "got {name:?}");
+    }
+
+    #[test]
+    fn resolve_output_file_name_defaults_when_whitespace_only() {
+        let name = resolve_output_file_name("   ");
+        assert!(name.starts_with("recording_") && name.ends_with(".cast"));
+    }
+
+    #[test]
+    fn default_output_file_name_shape_and_variation() {
+        let a = default_output_file_name();
+        assert!(a.starts_with("recording_"));
+        assert!(a.ends_with(".cast"));
+        // Overwhelmingly likely to differ across draws if the source is random.
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..50 {
+            seen.insert(default_output_file_name());
+        }
+        assert!(seen.len() > 1, "default file name appears constant");
+    }
+
+    #[test]
+    fn output_path_joins_dir_slug_and_name() {
+        let path = output_path("/tmp/out", "op-slug", "rec.cast");
+        assert_eq!(path, PathBuf::from("/tmp/out/op-slug/rec.cast"));
+    }
+
+    #[test]
+    fn output_path_composes_with_resolved_name() {
+        // The two pure helpers compose into the documented target layout.
+        let name = resolve_output_file_name("my-recording.cast");
+        let path = output_path("/recordings", "alpha", &name);
+        assert_eq!(path, PathBuf::from("/recordings/alpha/my-recording.cast"));
+    }
+}
