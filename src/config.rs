@@ -1,4 +1,4 @@
-//! Layered configuration model: defaults < file < env < cli.
+//! Layered configuration model: defaults < file < cli.
 //!
 //! This module is the canonical worked example of the project's error-handling
 //! convention: a typed [`ConfigError`] enum built with `thiserror`. Callers at
@@ -6,24 +6,20 @@
 //!
 //! # Precedence
 //!
-//! [`Config::load`] resolves a [`Config`] by layering four sources, each later
+//! [`Config::load`] resolves a [`Config`] by layering three sources, each later
 //! source overriding the earlier ones **only for the values it actually
 //! provides**:
 //!
 //! 1. built-in [`Config::with_defaults`]
 //! 2. the YAML config file (`<config>/aterm/config.yaml`)
-//! 3. environment variables (`ASHIRT_TERM_RECORDER_*`)
-//! 4. CLI flags ([`crate::cli::Cli`])
+//! 3. CLI flags ([`crate::cli::Cli`])
 //!
 //! A value that a layer does not supply must NOT clobber a value set by an
 //! earlier layer. Concretely:
 //!
-//! * An **unset** environment variable and an **absent** CLI flag are skipped.
-//!   CLI overrides are modelled as `Option<T>` (see [`crate::cli::Cli`]) so that
-//!   clap default values never overwrite file/env values.
-//! * An environment variable set to the **empty string** counts as *not
-//!   provided*: it will not overwrite a value from the file layer. This mirrors
-//!   the Go implementation it replaces.
+//! * An **absent** CLI flag is skipped. CLI overrides are modelled as
+//!   `Option<T>` (see [`crate::cli::Cli`]) so that clap default values never
+//!   overwrite file values.
 
 use std::fmt;
 use std::fs;
@@ -33,22 +29,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::cli::Cli;
-
-/// Environment variable names for the env layer (`ASHIRT_TERM_RECORDER_*`).
-///
-/// These mirror the names produced by the Go `envconfig` integration
-/// (`ASHIRT_TERM_RECORDER` prefix, `split_words` casing) so existing
-/// deployments keep working.
-mod env_vars {
-    pub const CONFIG_VERSION: &str = "ASHIRT_TERM_RECORDER_CONFIG_VERSION";
-    pub const API_URL: &str = "ASHIRT_TERM_RECORDER_API_URL";
-    pub const OUTPUT_DIR: &str = "ASHIRT_TERM_RECORDER_OUTPUT_DIR";
-    pub const ACCESS_KEY: &str = "ASHIRT_TERM_RECORDER_ACCESS_KEY";
-    pub const SECRET_KEY: &str = "ASHIRT_TERM_RECORDER_SECRET_KEY";
-    pub const OUTPUT_FILE_NAME: &str = "ASHIRT_TERM_RECORDER_OUTPUT_FILE_NAME";
-    pub const OPERATION_SLUG: &str = "ASHIRT_TERM_RECORDER_OPERATION_SLUG";
-    pub const RECORDING_SHELL: &str = "ASHIRT_TERM_RECORDER_RECORDING_SHELL";
-}
 
 /// File name of the aterm config inside the platform config directory.
 const CONFIG_FILE_NAME: &str = "config.yaml";
@@ -98,10 +78,6 @@ pub enum ConfigError {
         #[source]
         source: serde_yaml_ng::Error,
     },
-
-    /// An environment variable held a value that could not be parsed.
-    #[error("environment variable {var} has an invalid value {value:?}")]
-    EnvInvalid { var: String, value: String },
 }
 
 /// Resolved aterm configuration.
@@ -109,7 +85,7 @@ pub enum ConfigError {
 /// The serialized field names match the Go `aterm` `config.yaml` so existing
 /// files round-trip unchanged. `output_file_name` is intentionally *not*
 /// persisted to the file (it is a per-run value), matching the Go `yaml:"-"`
-/// tag; it can still be supplied via the env / CLI layers.
+/// tag; it can still be supplied via the CLI layer.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -175,26 +151,18 @@ impl Config {
     }
 
     /// Loads configuration from the real environment, layering
-    /// defaults < file < env < cli.
+    /// defaults < file < cli.
     ///
     /// The config file is read from [`config_path`]; a missing file is not an
-    /// error (the defaults/env/cli layers still apply).
+    /// error (the defaults/cli layers still apply).
     pub fn load(cli: &Cli) -> Result<Self, ConfigError> {
         let path = config_path()?;
-        Self::load_from(&path, |key| std::env::var(key).ok(), cli)
+        Self::load_from(&path, cli)
     }
 
-    /// Core layered load, parameterized over the config-file path and the
-    /// environment source so it can be exercised deterministically in tests
-    /// (without mutating the process-wide environment).
-    ///
-    /// `env_get` returns the raw value of an environment variable, or `None`
-    /// when it is unset.
-    fn load_from(
-        path: &Path,
-        env_get: impl Fn(&str) -> Option<String>,
-        cli: &Cli,
-    ) -> Result<Self, ConfigError> {
+    /// Core layered load, parameterized over the config-file path so it can be
+    /// exercised deterministically in tests.
+    fn load_from(path: &Path, cli: &Cli) -> Result<Self, ConfigError> {
         let mut cfg = Config::with_defaults();
 
         // File layer: a partial config overlaid over the defaults. An absent
@@ -202,9 +170,6 @@ impl Config {
         if let Some(layer) = file_layer(path)? {
             cfg.apply(layer);
         }
-
-        // Env layer.
-        cfg.apply(env_layer(&env_get)?);
 
         // CLI layer (highest precedence).
         cfg.apply(cli_layer(cli));
@@ -328,34 +293,6 @@ fn file_layer(path: &Path) -> Result<Option<ConfigLayer>, ConfigError> {
         })
 }
 
-/// Builds the env layer from an environment source.
-///
-/// An unset variable, or one set to the empty string, is treated as *not
-/// provided* and yields `None` for that field.
-fn env_layer(env_get: &impl Fn(&str) -> Option<String>) -> Result<ConfigLayer, ConfigError> {
-    // Treat unset OR empty as "not provided".
-    let get = |key: &str| env_get(key).filter(|v| !v.is_empty());
-
-    let config_version = match get(env_vars::CONFIG_VERSION) {
-        Some(raw) => Some(raw.parse::<i64>().map_err(|_| ConfigError::EnvInvalid {
-            var: env_vars::CONFIG_VERSION.to_string(),
-            value: raw,
-        })?),
-        None => None,
-    };
-
-    Ok(ConfigLayer {
-        config_version,
-        api_url: get(env_vars::API_URL),
-        output_dir: get(env_vars::OUTPUT_DIR),
-        access_key: get(env_vars::ACCESS_KEY),
-        secret_key: get(env_vars::SECRET_KEY),
-        output_file_name: get(env_vars::OUTPUT_FILE_NAME),
-        operation_slug: get(env_vars::OPERATION_SLUG),
-        recording_shell: get(env_vars::RECORDING_SHELL),
-    })
-}
-
 /// Builds the CLI layer. Absent flags (`None`) do not override earlier layers.
 fn cli_layer(cli: &Cli) -> ConfigLayer {
     ConfigLayer {
@@ -413,10 +350,10 @@ mod tests {
         assert!(cfg.api_url.is_empty());
     }
 
-    /// REQUIRED: all four layers set the same field to four distinct values;
-    /// the CLI value must win end-to-end (defaults < file < env < cli).
+    /// REQUIRED: all three layers set the same field to three distinct values;
+    /// the CLI value must win end-to-end (defaults < file < cli).
     #[test]
-    fn four_layer_precedence_cli_wins() {
+    fn three_layer_precedence_cli_wins() {
         let path = temp_path("precedence");
         // File layer sets recording_shell (and operation_slug, exercised below).
         fs::write(
@@ -425,29 +362,22 @@ mod tests {
         )
         .expect("write temp config");
 
-        // Env layer overrides recording_shell (and operation_slug).
-        let env = |key: &str| match key {
-            env_vars::RECORDING_SHELL => Some("env-shell".to_string()),
-            env_vars::OPERATION_SLUG => Some("env-op".to_string()),
-            _ => None,
-        };
-
         // CLI layer overrides recording_shell only.
         let cli = Cli::parse_from(["aterm", "--shell", "cli-shell"]);
 
-        let cfg = Config::load_from(&path, env, &cli).expect("layered load");
+        let cfg = Config::load_from(&path, &cli).expect("layered load");
 
-        // The contested field: every layer set it; CLI wins.
+        // The contested field: file and CLI both set it; CLI wins.
         assert_eq!(cfg.recording_shell, "cli-shell", "cli must win for shell");
-        // Only file+env set this one; env wins over file (cli absent).
+        // Only the file set this one; it survives untouched (cli absent).
         assert_eq!(
-            cfg.operation_slug, "env-op",
-            "env beats file when cli absent"
+            cfg.operation_slug, "file-op",
+            "file value survives when cli absent"
         );
         // Only the file set this one; it survives untouched.
         assert_eq!(
             cfg.api_url, "file-url",
-            "file value survives when env/cli absent"
+            "file value survives when cli absent"
         );
         // No layer touched this one; the built-in default survives.
         assert_eq!(
@@ -458,28 +388,11 @@ mod tests {
         fs::remove_file(&path).ok();
     }
 
-    /// An env var set to the empty string must NOT overwrite a file value.
-    #[test]
-    fn empty_env_does_not_override_file() {
-        let path = temp_path("empty-env");
-        fs::write(&path, "recordingShell: file-shell\n").expect("write temp config");
-
-        let env = |key: &str| match key {
-            env_vars::RECORDING_SHELL => Some(String::new()), // empty == not provided
-            _ => None,
-        };
-
-        let cfg = Config::load_from(&path, env, &empty_cli()).expect("layered load");
-        assert_eq!(cfg.recording_shell, "file-shell");
-
-        fs::remove_file(&path).ok();
-    }
-
-    /// A missing config file is not an error; defaults/env/cli still apply.
+    /// A missing config file is not an error; defaults/cli still apply.
     #[test]
     fn missing_file_is_not_an_error() {
         let path = temp_path("missing");
-        let cfg = Config::load_from(&path, |_| None, &empty_cli()).expect("missing file is ok");
+        let cfg = Config::load_from(&path, &empty_cli()).expect("missing file is ok");
         assert_eq!(cfg.config_version, 1);
     }
 
