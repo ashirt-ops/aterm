@@ -27,7 +27,7 @@ use thiserror::Error;
 use crate::ashirt::http::{Client, HttpError};
 use crate::ashirt::ops_tags::{self, Tag};
 use crate::ashirt::upload::{
-    upload_evidence, Evidence, UploadError, CONTENT_TYPE_TERMINAL_RECORDING,
+    CONTENT_TYPE_TERMINAL_RECORDING, Evidence, UploadError, upload_evidence,
 };
 use crate::tui::{self, TuiError};
 

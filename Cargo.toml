@@ -1,9 +1,9 @@
 [package]
 name = "aterm"
 version = "0.0.0"
-edition = "2021"
-# MSRV: code uses Option::is_none_or (stabilized in 1.82).
-rust-version = "1.82"
+edition = "2024"
+# MSRV: edition 2024 requires Rust 1.85+.
+rust-version = "1.85"
 description = "ASHIRT terminal recorder (Rust rewrite)"
 license = "MIT"
 repository = "https://github.com/ashirt-ops/aterm"

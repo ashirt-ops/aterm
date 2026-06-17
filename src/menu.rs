@@ -37,9 +37,9 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::ashirt::http::{Client, HttpError};
-use crate::ashirt::ops_tags::{list_operations, Operation};
+use crate::ashirt::ops_tags::{Operation, list_operations};
 use crate::config::Config;
-use crate::recorder::{record_session, RecorderError};
+use crate::recorder::{RecorderError, record_session};
 use crate::tui::{self, TuiError};
 use crate::upload_menu;
 

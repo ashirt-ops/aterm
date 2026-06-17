@@ -8,8 +8,8 @@
 //!     input-forwarding loop can notice the child exiting and stop promptly.
 
 use std::io;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use super::StdinRead;

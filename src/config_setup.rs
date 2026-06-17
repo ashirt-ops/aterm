@@ -193,7 +193,7 @@ pub fn read_ashirt_import(path: &Path) -> Result<Option<AshirtImport>, ConfigErr
             return Err(ConfigError::Read {
                 path: path.to_path_buf(),
                 source,
-            })
+            });
         }
     };
     // An ASHIRT config that fails to parse is treated as "nothing to import"
