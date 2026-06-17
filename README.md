@@ -37,27 +37,27 @@ After each recording, a small menu is presented with available options:
 
 ### Configuration
 
-This binary supports a few configuration options, and will attempt to load from each configuration level in order to come up with a complete view of how the interaction should be handled. The configuration levels are as follows: First, load from the config file, then replace with defined values from the env vars, then replace with command line switches.
+This binary supports a few configuration options, and will attempt to load from each configuration level in order to come up with a complete view of how the interaction should be handled. The configuration levels are as follows: First, load the built-in defaults, then replace with defined values from the config file, then replace with command line switches.
 
 Additionally, on first run, if you are using the ASHIRT application, then some configuration details can be pulled from its configuration file.
 
 The configuration file adheres to the XDG standard, where applicable. If you have XDG_CONFIG_HOME set, then your config file will be found under the `ashirt` directory. If this value is not set, then it will likely be saved to `/home/{who}/ashirt/aterm.yaml`. However, most settings can be tweaked in the application itself, by going to the main menu and choosing "Update Settings". A small guide will take you through common configuration values
 
-| Config File Parameter | Env Parameter                         | CLI flag          | Meaning                                                                                               |
-| --------------------- | ------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------- |
-| outputDir             | ASHIRT_TERM_RECORDER_OUTPUT_DIR       |                   | Determines where to store recording files. Defaults to home directory                                 |
-| recordingShell        | ASHIRT_TERM_RECORDER_RECORDING_SHELL  | -shell       -s   | Which shell to use when starting up (defaults to env's SHELL)                                         |
-| operationSlug         | ASHIRT_TERM_RECORDER_OPERATION_SLUG   | -operation        | Which operation to upload to (by default -- can be selected prior to recording)                       |
-| apiURL                | ASHIRT_TERM_RECORDER_API_URL          |                   | Where the **backend** service is located.                                                             |
-| N/A                   | ASHIRT_TERM_RECORDER_OUTPUT_FILE_NAME | --name -n         | What filename to use when writing the file locally (and remotely as well)                             |
-| accessKey             | ASHIRT_TERM_RECORDER_ACCESS_KEY       | N/A               | The Access Key needed to connect with the backend (created on the frontend)                           |
-| secretKey             | ASHIRT_TERM_RECORDER_SECRET_KEY       | N/A               | The Secret Key needed to connect with the backend (created on the frontend). This is a base-64 value  |
-|                       |                                       | -menu -m          | Starts in the main menu                                                                               |
-|                       |                                       | -pring-config -pc | Prints the loaded configuration, then exits                                                           |
-|                       |                                       | -help -h          | Opens the help menu                                                                                   |
-|                       |                                       | -shell -s         | Launches the recoder with the specified shell. This should be the path to the binary                  |
-|                       |                                       | -reset            | Launches first-run to set up initial values. Uses the existing values as a base.                      |
-|                       |                                       | -reset-hard       | Launches first-run to set up initial config values. Does not use the existing configuration as a base |
+| Config File Parameter | CLI flag          | Meaning                                                                                               |
+| --------------------- | ----------------- | ----------------------------------------------------------------------------------------------------- |
+| outputDir             |                   | Determines where to store recording files. Defaults to home directory                                 |
+| recordingShell        | -shell       -s   | Which shell to use when starting up (defaults to env's SHELL)                                         |
+| operationSlug         | -operation        | Which operation to upload to (by default -- can be selected prior to recording)                       |
+| apiURL                |                   | Where the **backend** service is located.                                                             |
+| N/A                   | --name -n         | What filename to use when writing the file locally (and remotely as well)                             |
+| accessKey             | N/A               | The Access Key needed to connect with the backend (created on the frontend)                           |
+| secretKey             | N/A               | The Secret Key needed to connect with the backend (created on the frontend). This is a base-64 value  |
+|                       | -menu -m          | Starts in the main menu                                                                               |
+|                       | -pring-config -pc | Prints the loaded configuration, then exits                                                           |
+|                       | -help -h          | Opens the help menu                                                                                   |
+|                       | -shell -s         | Launches the recoder with the specified shell. This should be the path to the binary                  |
+|                       | -reset            | Launches first-run to set up initial values. Uses the existing values as a base.                      |
+|                       | -reset-hard       | Launches first-run to set up initial config values. Does not use the existing configuration as a base |
 
 ### Known Issues
 
