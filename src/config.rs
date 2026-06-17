@@ -157,12 +157,22 @@ struct ConfigFile {
 impl Config {
     /// Returns the built-in defaults — the lowest-precedence source.
     ///
-    /// Mirrors the Go `TermRecorderConfigWithDefaults`: schema version `1` and
-    /// the recording shell taken from the `SHELL` environment variable.
+    /// Mirrors the Go `TermRecorderConfigWithDefaults`: schema version `1`, the
+    /// recording shell taken from the `SHELL` environment variable, and the
+    /// output base defaulting to the user's home directory (matching the Go
+    /// `aterm` documented `outputDir` default).
     pub fn with_defaults() -> Self {
         Config {
             config_version: 1,
             recording_shell: std::env::var("SHELL").unwrap_or_default(),
+            // Base recordings under the user's home directory by default so a
+            // config with no file/CLI value still has a sensible, absolute
+            // output base. If the home dir cannot be determined (very unlikely),
+            // fall back to the empty string, which the file/CLI can still
+            // override.
+            output_dir: directories::BaseDirs::new()
+                .map(|b| b.home_dir().display().to_string())
+                .unwrap_or_default(),
             // Default ENABLED. The derived `Default` gives `false` for a bool, so
             // the enabled default lives here and is preserved by the file overlay
             // (absent in file => stays `true`).
@@ -554,6 +564,37 @@ mod tests {
     #[test]
     fn auto_update_check_defaults_enabled() {
         assert!(Config::with_defaults().auto_update_check);
+    }
+
+    /// The built-in default for `output_dir` is a non-empty, sensible base — the
+    /// user's home directory — so recordings have an output base even with no
+    /// file/CLI value. (CI/dev environments always have a resolvable home.)
+    #[test]
+    fn output_dir_defaults_to_home_dir() {
+        let home = directories::BaseDirs::new()
+            .map(|b| b.home_dir().display().to_string())
+            .expect("a home directory is resolvable in the test environment");
+        let cfg = Config::with_defaults();
+        assert!(!cfg.output_dir.is_empty(), "output_dir default must be set");
+        assert_eq!(
+            cfg.output_dir, home,
+            "output_dir default must be the home directory"
+        );
+    }
+
+    /// A config-file `outputDir` overrides the built-in home-directory default.
+    #[test]
+    fn output_dir_file_overrides_default() {
+        let path = temp_path("output-dir-override");
+        fs::write(&path, "outputDir: /tmp/custom-recordings\n").expect("write temp config");
+
+        let cfg = Config::load_from(&path, &empty_cli()).expect("load");
+        assert_eq!(
+            cfg.output_dir, "/tmp/custom-recordings",
+            "file outputDir must override the home-directory default"
+        );
+
+        fs::remove_file(&path).ok();
     }
 
     /// REQUIRED (serde gotcha): a config file that omits `autoUpdateCheck` must
