@@ -15,7 +15,7 @@
 //!   * status-code error mapping — `401` is an auth error, `500` is a server
 //!     error, any other non-2xx is a generic status error.
 
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, DATE};
 use reqwest::Method;
@@ -28,6 +28,10 @@ use super::signing::{self, Credentials, SigningError};
 /// Errors produced by the ASHIRT HTTP layer.
 #[derive(Debug, Error)]
 pub enum HttpError {
+    /// The underlying HTTP client could not be constructed (e.g. a malformed
+    /// `HTTP(S)_PROXY` environment variable).
+    #[error("failed to build HTTP client: {0}")]
+    Builder(#[source] reqwest::Error),
     /// The configured base URL (plus path) could not be parsed into a valid URL.
     #[error("invalid url: {0}")]
     InvalidUrl(String),
@@ -68,18 +72,33 @@ pub struct Client {
     inner: reqwest::blocking::Client,
 }
 
+/// Connection-establishment timeout for the blocking client.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Overall per-request timeout so the menu-driven flow never hangs forever on a
+/// stalled server.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
 impl Client {
     /// Creates a client targeting the ASHIRT instance at `base_url`, signing
     /// every request with `creds`.
     ///
     /// `base_url` is the frontend URL; the API root is derived from it via
     /// [`build_api_url`].
-    pub fn new(base_url: impl AsRef<str>, creds: Credentials) -> Self {
-        Self {
+    ///
+    /// Returns an error if the underlying HTTP client cannot be built — building
+    /// via [`reqwest::blocking::ClientBuilder`] propagates failures (e.g. a
+    /// malformed proxy environment variable) instead of panicking the process.
+    pub fn new(base_url: impl AsRef<str>, creds: Credentials) -> Result<Self, HttpError> {
+        let inner = reqwest::blocking::Client::builder()
+            .connect_timeout(CONNECT_TIMEOUT)
+            .timeout(REQUEST_TIMEOUT)
+            .build()
+            .map_err(HttpError::Builder)?;
+        Ok(Self {
             api_url: build_api_url(base_url.as_ref()),
             creds,
-            inner: reqwest::blocking::Client::new(),
-        }
+            inner,
+        })
     }
 
     /// The derived API root URL (`.../api`, no trailing slash).
@@ -154,21 +173,26 @@ impl Client {
         }
 
         let bytes = response.bytes()?;
+        // A 204 No Content (or any empty body) has no JSON to parse; feeding an
+        // empty slice to serde_json is an EOF error. Treat empty as JSON `null`
+        // so unit/`Option` response types deserialize cleanly.
+        if bytes.is_empty() {
+            return serde_json::from_slice(b"null").map_err(HttpError::Deserialize);
+        }
         serde_json::from_slice(&bytes).map_err(HttpError::Deserialize)
     }
 }
 
 /// Derives the ASHIRT API root from a frontend base URL.
 ///
-/// Port of Go `SetBaseURL`: ensure a single trailing slash, then append `api`.
-/// `https://h` and `https://h/` both yield `https://h/api`.
+/// Port of Go `SetBaseURL`, hardened to be idempotent: strip any trailing slash
+/// and an already-present `/api` segment before appending `/api`, so that
+/// `https://h`, `https://h/`, `https://h/api`, and `https://h/api/` all yield
+/// `https://h/api` (never `https://h/api/api`).
 fn build_api_url(base_url: &str) -> String {
-    let mut url = base_url.to_string();
-    if !url.ends_with('/') {
-        url.push('/');
-    }
-    url.push_str("api");
-    url
+    let trimmed = base_url.trim_end_matches('/');
+    let root = trimmed.strip_suffix("/api").unwrap_or(trimmed);
+    format!("{root}/api")
 }
 
 /// Maps an HTTP status code to an [`HttpError`], or `None` for success (2xx).
@@ -198,6 +222,10 @@ mod tests {
         }
     }
 
+    fn client_for(server: &MockServer) -> Client {
+        Client::new(server.base_url(), test_creds()).expect("client should build")
+    }
+
     #[test]
     fn build_api_url_appends_api_without_trailing_slash() {
         assert_eq!(build_api_url("https://h"), "https://h/api");
@@ -215,8 +243,14 @@ mod tests {
     }
 
     #[test]
+    fn build_api_url_is_idempotent_when_base_already_ends_in_api() {
+        assert_eq!(build_api_url("https://h/api"), "https://h/api");
+        assert_eq!(build_api_url("https://h/api/"), "https://h/api");
+    }
+
+    #[test]
     fn client_derives_api_url() {
-        let c = Client::new("https://ashirt.example", test_creds());
+        let c = Client::new("https://ashirt.example", test_creds()).expect("client should build");
         assert_eq!(c.api_url(), "https://ashirt.example/api");
     }
 
@@ -269,7 +303,7 @@ mod tests {
                 ]));
         });
 
-        let client = Client::new(server.base_url(), test_creds());
+        let client = client_for(&server);
         let ops: Vec<Op> = client
             .get_json("/operations")
             .expect("signed GET should round-trip and deserialize");
@@ -281,24 +315,61 @@ mod tests {
     }
 
     #[test]
-    fn authorization_header_is_access_key_prefixed_and_signed() {
+    fn authorization_header_equals_independently_computed_signature() {
+        use std::sync::{Arc, Mutex};
+
         let server = MockServer::start();
 
-        // Assert the Authorization header is access-key-prefixed and carries a
-        // non-empty base64 signature, confirming the client actually signs the
-        // request it sends rather than emitting a bare key.
+        // Capture the exact Date and Authorization headers the client sends so we
+        // can recompute the signature from them and assert byte-for-byte equality.
+        let captured: Arc<Mutex<Option<(String, String)>>> = Arc::new(Mutex::new(None));
+        let sink = Arc::clone(&captured);
+
         let mock = server.mock(|when, then| {
             when.method(GET)
                 .path("/api/operations")
-                .header_matches("Authorization", r"^test-access-key:.+$");
+                .is_true(move |req| {
+                    let headers = req.headers();
+                    let date = headers
+                        .get("date")
+                        .and_then(|v| v.to_str().ok())
+                        .map(str::to_string);
+                    let auth = headers
+                        .get("authorization")
+                        .and_then(|v| v.to_str().ok())
+                        .map(str::to_string);
+                    if let (Some(date), Some(auth)) = (date, auth) {
+                        *sink.lock().unwrap() = Some((date, auth));
+                    }
+                    true
+                });
             then.status(200)
                 .header("content-type", "application/json")
                 .json_body(serde_json::json!([]));
         });
 
-        let client = Client::new(server.base_url(), test_creds());
+        let client = client_for(&server);
         let _: Vec<Op> = client.get_json("/operations").expect("GET should succeed");
         mock.assert();
+
+        let (sent_date, sent_auth) = captured
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("request must carry Date and Authorization headers");
+
+        // Recompute the expected Authorization independently from the SAME inputs:
+        // method, request URI, the Date the client actually sent, and an empty
+        // GET body. Equality here proves the client signs exactly what it sends —
+        // including that the signed Date matches the Date header on the wire
+        // (a mismatch would break server-side HMAC validation).
+        let expected =
+            signing::sign_request(&test_creds(), "GET", "/api/operations", &sent_date, b"")
+                .expect("independent signing should succeed");
+
+        assert_eq!(sent_auth, expected);
+        // Sanity: not just any string — it is access-key-prefixed.
+        assert!(sent_auth.starts_with("test-access-key:"));
     }
 
     #[test]
@@ -317,7 +388,7 @@ mod tests {
                 .json_body(serde_json::json!({ "slug": "new-op", "name": "New Op" }));
         });
 
-        let client = Client::new(server.base_url(), test_creds());
+        let client = client_for(&server);
         let body = serde_json::json!({ "name": "New Op" });
         let op: Op = client
             .post_json("/operations", &body)
@@ -328,6 +399,24 @@ mod tests {
     }
 
     #[test]
+    fn empty_204_response_deserializes_to_unit() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(GET).path("/api/operations");
+            // 204 No Content: success status, empty body.
+            then.status(204);
+        });
+
+        let client = client_for(&server);
+        // A unit response type must succeed against an empty body rather than
+        // hitting a serde_json EOF error.
+        client
+            .get_json::<()>("/operations")
+            .expect("empty 204 body should deserialize to unit");
+        mock.assert();
+    }
+
+    #[test]
     fn unauthorized_status_maps_to_error() {
         let server = MockServer::start();
         let _mock = server.mock(|when, then| {
@@ -335,7 +424,7 @@ mod tests {
             then.status(401);
         });
 
-        let client = Client::new(server.base_url(), test_creds());
+        let client = client_for(&server);
         let err = client
             .get_json::<Vec<Op>>("/operations")
             .expect_err("401 must surface as an error");
@@ -350,7 +439,7 @@ mod tests {
             then.status(500);
         });
 
-        let client = Client::new(server.base_url(), test_creds());
+        let client = client_for(&server);
         let err = client
             .get_json::<Vec<Op>>("/operations")
             .expect_err("500 must surface as an error");
@@ -365,7 +454,7 @@ mod tests {
             then.status(404);
         });
 
-        let client = Client::new(server.base_url(), test_creds());
+        let client = client_for(&server);
         let err = client
             .get_json::<Vec<Op>>("/operations")
             .expect_err("404 must surface as an error");
