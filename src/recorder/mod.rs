@@ -33,7 +33,7 @@
 
 use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -106,7 +106,7 @@ pub trait Session {
     fn resize(&mut self, cols: u16, rows: u16) -> Result<(), RecorderError>;
 
     /// Returns `Some(exit_code)` if the child has exited, else `None`.
-    fn try_wait(&mut self) -> Result<Option<i32>, RecorderError>;
+    fn try_wait(&mut self) -> Result<Option<u32>, RecorderError>;
 }
 
 /// A `portable-pty`-backed [`Session`]. Cross-platform: `portable-pty` selects
@@ -178,13 +178,15 @@ impl Session for PtySession {
             .map_err(|e| RecorderError::Resize(e.to_string()))
     }
 
-    fn try_wait(&mut self) -> Result<Option<i32>, RecorderError> {
+    fn try_wait(&mut self) -> Result<Option<u32>, RecorderError> {
         match self
             .child
             .try_wait()
             .map_err(|e| RecorderError::Wait(e.to_string()))?
         {
-            Some(status) => Ok(Some(status.exit_code() as i32)),
+            // `exit_code()` is a `u32`; keep it unsigned so large Windows exit
+            // codes are not truncated to a negative `"x"` payload.
+            Some(status) => Ok(Some(status.exit_code())),
             None => Ok(None),
         }
     }
@@ -248,10 +250,10 @@ impl Utf8Chunker {
                 }
                 Err(e) => {
                     let valid = e.valid_up_to();
-                    out.push_str(
-                        std::str::from_utf8(&rest[..valid])
-                            .expect("valid_up_to bytes are valid utf8"),
-                    );
+                    // SAFETY: `valid_up_to()` guarantees `rest[..valid]` is valid
+                    // UTF-8, so this avoids both a redundant re-decode and any
+                    // panic in the production output path.
+                    out.push_str(unsafe { std::str::from_utf8_unchecked(&rest[..valid]) });
                     match e.error_len() {
                         // Incomplete trailing sequence: carry it for next time.
                         None => {
@@ -283,7 +285,7 @@ impl Utf8Chunker {
 }
 
 /// Formats an exit status code as asciicast `"x"` event data.
-pub fn exit_status_data(code: i32) -> String {
+pub fn exit_status_data(code: u32) -> String {
     code.to_string()
 }
 
@@ -329,7 +331,7 @@ impl<W: Write> Recorder<W> {
     }
 
     /// Records the final `"x"` exit event at elapsed time `at`.
-    pub fn exit(&mut self, at: f64, code: i32) -> Result<(), RecorderError> {
+    pub fn exit(&mut self, at: f64, code: u32) -> Result<(), RecorderError> {
         self.writer
             .write_event(at, EventKind::Exit, exit_status_data(code))?;
         Ok(())
@@ -370,6 +372,16 @@ fn build_header(cols: u16, rows: u16, shell: &str) -> Header {
     header
 }
 
+/// Locks the shared recorder, mapping a poisoned mutex to a [`RecorderError`]
+/// instead of panicking — these call sites are all on `Result`-returning paths.
+fn lock_recorder<W: Write>(
+    recorder: &Arc<Mutex<Recorder<W>>>,
+) -> Result<MutexGuard<'_, Recorder<W>>, RecorderError> {
+    recorder
+        .lock()
+        .map_err(|_| RecorderError::Io(io::Error::other("recorder mutex poisoned")))
+}
+
 /// Pumps child PTY output to both the user's terminal (raw bytes) and the
 /// recorder (timestamped `"o"` events) until EOF.
 fn pump_output<W: Write>(
@@ -398,7 +410,7 @@ fn pump_output<W: Write>(
 
         let text = chunker.push(&buf[..n]);
         if !text.is_empty() {
-            let mut rec = recorder.lock().expect("recorder mutex poisoned");
+            let mut rec = lock_recorder(recorder)?;
             let at = rec.elapsed();
             rec.output(at, &text)?;
         }
@@ -406,7 +418,7 @@ fn pump_output<W: Write>(
 
     let tail = chunker.flush();
     if !tail.is_empty() {
-        let mut rec = recorder.lock().expect("recorder mutex poisoned");
+        let mut rec = lock_recorder(recorder)?;
         let at = rec.elapsed();
         rec.output(at, &tail)?;
     }
@@ -428,7 +440,7 @@ fn pump_output<W: Write>(
 pub fn record_session<W: Write + Send + 'static>(
     shell: &str,
     sink: W,
-) -> Result<i32, RecorderError> {
+) -> Result<u32, RecorderError> {
     let (cols, rows) = terminal_size();
     let header = build_header(cols, rows, shell);
     let recorder = Arc::new(Mutex::new(Recorder::start(sink, &header)?));
@@ -446,56 +458,73 @@ pub fn record_session<W: Write + Send + 'static>(
     let pump_recorder = Arc::clone(&recorder);
     let pump = thread::spawn(move || pump_output(reader, &pump_recorder));
 
-    let mut stdin_buf = [0u8; 8192];
-    let mut stdin_open = true;
-    let exit_code = loop {
-        if resize_watcher.take_pending() {
-            let (cols, rows) = terminal_size();
-            session.resize(cols, rows)?;
-            let mut rec = recorder.lock().expect("recorder mutex poisoned");
-            let at = rec.elapsed();
-            rec.resize(at, cols, rows)?;
-        }
-
-        if stdin_open {
-            match stdin_poller.poll(&mut stdin_buf, Duration::from_millis(50))? {
-                StdinRead::Data(n) => {
-                    writer.write_all(&stdin_buf[..n])?;
-                    writer.flush()?;
-                }
-                StdinRead::Eof => stdin_open = false,
-                StdinRead::Timeout => {}
+    // The I/O loop runs in a closure so an error inside it never `?`-returns past
+    // the teardown below. The pump thread MUST be joined on every exit path —
+    // otherwise it would keep writing PTY output to stdout and the sink after
+    // `record_session` has returned (spurious writes, terminal already restored).
+    let loop_outcome = (|| -> Result<u32, RecorderError> {
+        let mut stdin_buf = [0u8; 8192];
+        let mut stdin_open = true;
+        loop {
+            if resize_watcher.take_pending() {
+                let (cols, rows) = terminal_size();
+                session.resize(cols, rows)?;
+                let mut rec = lock_recorder(&recorder)?;
+                let at = rec.elapsed();
+                rec.resize(at, cols, rows)?;
             }
-        } else {
-            thread::sleep(Duration::from_millis(50));
-        }
 
-        if let Some(code) = session.try_wait()? {
-            break code;
+            if stdin_open {
+                match stdin_poller.poll(&mut stdin_buf, Duration::from_millis(50))? {
+                    StdinRead::Data(n) => {
+                        writer.write_all(&stdin_buf[..n])?;
+                        writer.flush()?;
+                    }
+                    StdinRead::Eof => stdin_open = false,
+                    StdinRead::Timeout => {}
+                }
+            } else {
+                thread::sleep(Duration::from_millis(50));
+            }
+
+            if let Some(code) = session.try_wait()? {
+                return Ok(code);
+            }
         }
+    })();
+
+    // Teardown, run on EVERY exit path (success or error): stop forwarding input,
+    // drain + join the pump thread, then flush the cast tail.
+    drop(writer);
+    let pump_result = match pump.join() {
+        Ok(result) => result,
+        Err(_) => Err(RecorderError::OutputThreadPanicked),
     };
 
-    // Drop the input side, then drain remaining output before the exit event so
-    // the cast ends with everything the child printed.
-    drop(writer);
-    match pump.join() {
-        Ok(result) => result?,
-        Err(_) => return Err(RecorderError::OutputThreadPanicked),
-    }
-
-    {
-        let mut rec = recorder.lock().expect("recorder mutex poisoned");
-        let at = rec.elapsed();
-        rec.exit(at, exit_code)?;
-    }
-
-    let recorder = Arc::into_inner(recorder)
+    // Recover the recorder now that the pump is gone, tolerating a poisoned mutex
+    // (a panicked pump) so we can still flush the tail.
+    let mut recorder = Arc::into_inner(recorder)
         .expect("all other Arc holders joined")
         .into_inner()
-        .expect("recorder mutex poisoned");
-    recorder.finish()?;
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-    Ok(exit_code)
+    // Append the final `"x"` event only on a clean run; on an error path we still
+    // flush whatever was captured but emit no bogus exit code.
+    let exit_record = match &loop_outcome {
+        Ok(code) => {
+            let at = recorder.elapsed();
+            recorder.exit(at, *code)
+        }
+        Err(_) => Ok(()),
+    };
+    let finish_result = recorder.finish();
+
+    // Surface errors in priority order; teardown above already ran regardless.
+    let code = loop_outcome?;
+    pump_result?;
+    exit_record?;
+    finish_result?;
+    Ok(code)
 }
 
 #[cfg(test)]
@@ -649,7 +678,7 @@ mod tests {
             rec.output(at, &tail).unwrap();
         }
 
-        let code = child.wait().unwrap().exit_code() as i32;
+        let code = child.wait().unwrap().exit_code();
         let at = rec.elapsed();
         rec.exit(at, code).unwrap();
 
