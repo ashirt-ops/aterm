@@ -2,6 +2,29 @@
 
 ATerm provides the ability to record a terminal session in a separate pty. After recording, you can upload the file to an ASHIRT server.
 
+ATerm is a Rust crate. Recordings are written in the [asciicast v3](https://docs.asciinema.org/manual/asciicast/v3/) format.
+
+## Building & Running
+
+ATerm builds with the standard Rust toolchain (stable). From the repository root:
+
+```bash
+# Build a release binary (target/release/aterm)
+cargo build --release
+
+# Build and run directly
+cargo run
+
+# Run the test suite
+cargo test
+```
+
+The optional terminal-playback path is gated behind the `playback` feature:
+
+```bash
+cargo build --features playback
+```
+
 ## Overview / User's Guide
 
 The terminal recorder can be started via the `aterm` binary.

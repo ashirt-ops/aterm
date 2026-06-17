@@ -2,52 +2,75 @@
 
 ## Overview
 
-This program is actually two programs mascarading as one, and perhaps there's some value in splitting them up. The first sub-application is a somewhat complicated pty recorder. What this does is present a terminal for the user, then captures all _output_ generated from that pty session. The second sub-application is a pretty straight forward file uploader, with some somewhat complex cli interaction. Luckily, in both cases, a lot of the true complexity lies in the libraries being used. That said, there's a still a bit of wiring to go over.
+This program is two programs masquerading as one. The first sub-application is a
+pty recorder: it presents a terminal to the user and captures everything the pty
+session emits. The second is a file uploader with a fair amount of interactive
+CLI. Most of the underlying complexity lives in the libraries; what follows is
+the wiring that ties them together.
 
 ## Requirements
 
-This application has only a few requirements:
+* Operating System: Linux, macOS, or Windows.
+* A stable Rust toolchain (install via [rustup](https://rustup.rs/)).
 
-* Operating System is Linux or Mac OSX.
-* Go 1.14
-
-There's a soft requirement of Make as well, though this can be omitted if the make commands are run directly instead.
+No external build tooling (Make, etc.) is required — `cargo` drives everything.
 
 ## Building
 
-Executables can be created via the stanard `go build` tool from the `cmd/aterm` directory.
+ATerm is a single-binary crate. Use the standard `cargo` workflow from the
+repository root:
+
+```bash
+cargo build            # debug build (target/debug/aterm)
+cargo build --release  # optimized build (target/release/aterm)
+cargo run              # build and run
+cargo test             # run the test suite
+```
+
+The optional terminal-playback path (built on the `avt` virtual terminal) is
+gated behind the `playback` feature and is off by default:
+
+```bash
+cargo build --features playback
+cargo test  --features playback
+```
+
+Before opening a pull request, run the same gates CI enforces:
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
 
 ### Versioning
 
-This application can render its build details, including version to the user. These details are provided to the application as build flags, using the `ldflags` argument. This is accomplished by setting fields for:
-
-* `github.com/jrozner/go-info.version` for the tagged release version
-* `github.com/jrozner/go-info.commitHash` for the git hash used for this release
-* `github.com/jrozner/go-info.buildDate` for the actual date this release was built
-
-These fields are populated during ci, using GitHub Action's environment variables for these fields. These correspond to the fields `GITHUB_REF` and `GITHUB_SHA`. Dates are generated via the build system's date.
+Build details (version, commit hash, build date) are surfaced to the user at
+runtime. These are produced at build time and wired through CI on tagged
+releases; see `.github/workflows/ci.yml` and `.github/workflows/WORKFLOWS.md`.
 
 ## Project Structure
 
+The crate is organized as a thin binary (`src/main.rs`) over a library
+(`src/lib.rs`) so the bulk of the logic is testable without the binary target.
+
 ### Phase 1: Terminal recording
 
-The big idea with this phase is simply starting up the pty console in such a way as to store the result. The pty itself is managed in `cmd/aterm/ptystate.go`. However, in order to capture results, we need to wire up the recorder with a set of `io.Writer`s (one for stdin, one for stdout). Once we have a pair of writers, we need a way to generate events, and something to record those events somewhere. Finally, we need something to intepret those events and convert the raw event into something an interpreter will later be able to parse. Within the code, this is broken into the following components:
-
-| Component / Package     | Role                                                                   | Notes                                                          |
-| ----------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Eventer                 | Converts io.Writer bytes into a raw event                              | Can be customized with middleware for more customized behavior |
-| Recorders               | Provides mechanism to control output sections / manage stream metadata |                                                                |
-| Formatter               | Converts the raw event into a particular format                        | (e.g. asciinema format)                                        |
-| Terminal Writer (write) | Manages output mechanism                                               | (e.g. writing to a file)                                       |
-
-As mentioned above, the pty is configured with a pair of io.Writer instances. The first, and primary, is a muxed/multiplexed stdout and eventer. This essentially alows the pty to communicate stdout events both to the user (via stdout) and to the recording system (via the configured eventer). The second writer is a feed off of stdin, allowing the underlying system to react to input-related events as needed. Note, however, that these events are passed unfilterd into the pty, so it is not currently possible to ignore key events.
-
-With this knowledge, the flow then, for output related events is as follows:
-
-pty generates stdout-bound event -> Eventer sees this, and runs through various middleware to generate a raw event -> Event is passed to recorder, which in turn wirtes to the terminal writer -> Terminal writer passes to formatter conform the event -> Terminal writer writes to it's output stream
+The core idea is to start a pty console in a way that lets us store its output.
+The pty is driven (via `portable-pty`, blocking — no async runtime) in
+`src/recorder/`, with `unix.rs` and `windows.rs` providing the platform
+specifics. Output is teed to both the user's terminal and the asciicast event
+pipeline. The [asciicast v3] format is implemented directly in
+`src/asciicast.rs` (asciinema is not a dependency): a cast is newline-delimited
+JSON whose first line is a header object and whose following lines are
+`[interval, code, data]` event arrays.
 
 ### Phase 2: Uploading
 
-The upload section is really just a collection of CLI dialogs. The upload dialog itself can be found in `cmd/aterm/appdialogs/upload_prompt.go`, but a lot of the underlying code used there is actually located under `dialogs`. Once the upload is triggered, the upload action is deferred to `network`.
+The upload flow is largely interactive CLI. The menus and prompt wrappers live
+in `src/upload_menu.rs`, `src/menu.rs`, and `src/tui.rs` (thin wrappers over the
+`inquire` prompt library). Talking to the ASHIRT backend — request signing,
+operations/tags lookups, and the multipart upload itself — lives under
+`src/ashirt/` (`http.rs`, `signing.rs`, `ops_tags.rs`, `upload.rs`).
 
-## Known Dev Issues
+[asciicast v3]: https://docs.asciinema.org/manual/asciicast/v3/
