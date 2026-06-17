@@ -142,6 +142,20 @@ pub fn multiselect(message: &str, options: &[String]) -> Result<Vec<String>, Tui
         .map_err(TuiError::from)
 }
 
+/// Like [`multiselect`], but returns the *indices* (into the original `options`
+/// slice) of the chosen entries rather than their labels.
+///
+/// This lets callers map a selection back to its source by position, which is
+/// robust when option labels are not guaranteed unique (e.g. a sentinel entry
+/// that could collide with a real value).
+pub fn multiselect_indexed(message: &str, options: &[String]) -> Result<Vec<usize>, TuiError> {
+    let chosen = MultiSelect::new(message, options.to_vec())
+        .with_scorer(&|input, _opt, value, _idx| score_contains_ci(input, value))
+        .raw_prompt()
+        .map_err(TuiError::from)?;
+    Ok(chosen.into_iter().map(|opt| opt.index).collect())
+}
+
 /// Asks a yes/no question, returning `true` for yes. `default` is the answer
 /// applied when the user submits an empty response.
 pub fn confirm(message: &str, default: bool) -> Result<bool, TuiError> {
