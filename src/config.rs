@@ -366,12 +366,16 @@ fn cli_layer(cli: &Cli) -> ConfigLayer {
     }
 }
 
-/// Returns the platform configuration directory for aterm
-/// (e.g. `~/.config/aterm` on Linux, `%LOCALAPPDATA%\aterm` on Windows).
+/// Returns the platform configuration directory for aterm.
+///
+/// A plain `aterm` directory under the per-user config base on every platform:
+/// `~/.config/aterm` (Linux), `~/Library/Application Support/aterm` (macOS),
+/// `%APPDATA%\aterm` (Windows). This matches the Go `aterm` layout; we use
+/// [`directories::BaseDirs`] rather than `ProjectDirs` because the latter would
+/// reverse-DNS the directory to `com.ashirt.aterm` on macOS.
 pub fn config_dir() -> Result<PathBuf, ConfigError> {
-    let dirs =
-        directories::ProjectDirs::from("com", "ashirt", "aterm").ok_or(ConfigError::NoConfigDir)?;
-    Ok(dirs.config_dir().to_path_buf())
+    let base = directories::BaseDirs::new().ok_or(ConfigError::NoConfigDir)?;
+    Ok(base.config_dir().join("aterm"))
 }
 
 /// Returns the full path to the aterm config file
