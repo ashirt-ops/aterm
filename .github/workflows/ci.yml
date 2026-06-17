@@ -1,10 +1,8 @@
-# Rust CI for the aterm Rust rewrite.
+# CI for the aterm Rust crate.
 #
-# This is the workflow for the Rust crate (build/test/clippy/fmt across
-# Linux/macOS/Windows, plus tag-triggered release binaries). The legacy Go
-# workflow lives in `ci.yaml` and still builds the original Go sources on
-# pushes/PRs to `main`. Both run today; see README / WORKFLOWS.md for the
-# migration plan. Do NOT delete the Go workflow until the rewrite lands on main.
+# Builds/tests/clippy/fmt across Linux/macOS/Windows, plus tag-triggered
+# release binaries. This is the only CI workflow; the legacy Go workflow was
+# removed when the Rust rewrite replaced the Go implementation.
 name: Rust CI
 
 on:

@@ -8,7 +8,7 @@ labels: "bug, triage"
 Please fill in the following details to help us reproduce the bug:
 -->
 
-**Golang version** (`go version`):
+**Rust toolchain version** (`rustc --version` / `cargo --version`):
 
 **OS version** (`uname -a` if on a Unix-like system):
 
