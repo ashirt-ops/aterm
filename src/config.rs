@@ -1,25 +1,27 @@
-//! Layered configuration model: defaults < file < cli.
+//! Configuration model: built-in defaults, overlaid by the config file, then
+//! overridden by CLI flags.
 //!
 //! This module is the canonical worked example of the project's error-handling
 //! convention: a typed [`ConfigError`] enum built with `thiserror`. Callers at
 //! the command boundary (see [`crate::app::run`]) lift these into `anyhow`.
 //!
-//! # Precedence
+//! # Resolution
 //!
-//! [`Config::load`] resolves a [`Config`] by layering three sources, each later
-//! source overriding the earlier ones **only for the values it actually
-//! provides**:
+//! [`Config::load`] resolves a [`Config`] from three sources, each later source
+//! overriding the earlier ones **only for the values it actually provides**:
 //!
 //! 1. built-in [`Config::with_defaults`]
 //! 2. the YAML config file (`<config>/aterm/config.yaml`)
 //! 3. CLI flags ([`crate::cli::Cli`])
 //!
-//! A value that a layer does not supply must NOT clobber a value set by an
-//! earlier layer. Concretely:
+//! A source that does not supply a value must NOT clobber a value set by an
+//! earlier one. Concretely:
 //!
+//! * A field **absent** from the config file keeps the built-in default: the
+//!   file is parsed into a partial [`ConfigFile`] whose fields are all optional.
 //! * An **absent** CLI flag is skipped. CLI overrides are modelled as
 //!   `Option<T>` (see [`crate::cli::Cli`]) so that clap default values never
-//!   overwrite file values.
+//!   overwrite earlier values.
 
 use std::fmt;
 use std::fs;
@@ -85,7 +87,7 @@ pub enum ConfigError {
 /// The serialized field names match the Go `aterm` `config.yaml` so existing
 /// files round-trip unchanged. `output_file_name` is intentionally *not*
 /// persisted to the file (it is a per-run value), matching the Go `yaml:"-"`
-/// tag; it can still be supplied via the CLI layer.
+/// tag; it can still be supplied via a CLI flag.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -115,10 +117,14 @@ pub struct Config {
     pub recording_shell: String,
 }
 
-/// A partial configuration layer: every field is optional so that a layer can
-/// override *only* the values it provides, leaving the rest untouched.
+/// A partial view of the config file: every field is optional so that a field
+/// absent from the YAML overlays *nothing*, leaving the built-in default in
+/// place.
+///
+/// `output_file_name` is deliberately omitted: it is CLI/default-only and is
+/// never sourced from the file (see [`Config::output_file_name`]).
 #[derive(Debug, Clone, Default, Deserialize)]
-struct ConfigLayer {
+struct ConfigFile {
     #[serde(rename = "configVersion")]
     config_version: Option<i64>,
     #[serde(rename = "apiURL")]
@@ -129,8 +135,6 @@ struct ConfigLayer {
     access_key: Option<String>,
     #[serde(rename = "secretKey")]
     secret_key: Option<String>,
-    #[serde(skip)]
-    output_file_name: Option<String>,
     #[serde(rename = "operationSlug")]
     operation_slug: Option<String>,
     #[serde(rename = "recordingShell")]
@@ -138,7 +142,7 @@ struct ConfigLayer {
 }
 
 impl Config {
-    /// Returns the built-in defaults — the lowest-precedence layer.
+    /// Returns the built-in defaults — the lowest-precedence source.
     ///
     /// Mirrors the Go `TermRecorderConfigWithDefaults`: schema version `1` and
     /// the recording shell taken from the `SHELL` environment variable.
@@ -150,47 +154,57 @@ impl Config {
         }
     }
 
-    /// Loads configuration from the real environment, layering
-    /// defaults < file < cli.
+    /// Loads configuration from the real environment: defaults, overlaid by the
+    /// config file, then overridden by CLI flags.
     ///
     /// The config file is read from [`config_path`]; a missing file is not an
-    /// error (the defaults/cli layers still apply).
+    /// error (the defaults still apply and CLI flags still override).
     pub fn load(cli: &Cli) -> Result<Self, ConfigError> {
         let path = config_path()?;
         Self::load_from(&path, cli)
     }
 
-    /// Core layered load, parameterized over the config-file path so it can be
-    /// exercised deterministically in tests.
+    /// Core load, parameterized over the config-file path so it can be exercised
+    /// deterministically in tests.
     fn load_from(path: &Path, cli: &Cli) -> Result<Self, ConfigError> {
         let mut cfg = Config::with_defaults();
 
-        // File layer: a partial config overlaid over the defaults. An absent
-        // file is fine; any other read/parse error is fatal.
-        if let Some(layer) = file_layer(path)? {
-            cfg.apply(layer);
+        // Overlay the config file over the defaults. An absent file is fine; any
+        // other read/parse error is fatal.
+        if let Some(file) = read_config_file(path)? {
+            cfg.overlay_file(file);
         }
 
-        // CLI layer (highest precedence).
-        cfg.apply(cli_layer(cli));
+        // CLI flags override (highest precedence): apply each flag that is set.
+        // `output_file_name` is CLI/default-only and is never sourced from the
+        // file, so it is applied here alongside the file-overlaid fields.
+        if let Some(operation) = &cli.operation {
+            cfg.operation_slug = operation.clone();
+        }
+        if let Some(shell) = &cli.shell {
+            cfg.recording_shell = shell.clone();
+        }
+        if let Some(name) = &cli.name {
+            cfg.output_file_name = name.clone();
+        }
 
         Ok(cfg)
     }
 
     /// Reads a full [`Config`] from a YAML file, overlaid over the defaults.
     ///
-    /// Unlike [`Config::load`] this applies only the defaults and file layers.
-    /// A missing file yields the defaults.
+    /// Unlike [`Config::load`] this applies only the defaults and the config
+    /// file. A missing file yields the defaults.
     pub fn read_file(path: &Path) -> Result<Self, ConfigError> {
         let mut cfg = Config::with_defaults();
-        if let Some(layer) = file_layer(path)? {
-            cfg.apply(layer);
+        if let Some(file) = read_config_file(path)? {
+            cfg.overlay_file(file);
         }
         Ok(cfg)
     }
 
-    /// Parses a [`Config`] from a YAML document (the "file" layer), overlaid
-    /// over the [`Default`] values via `#[serde(default)]` on absent fields.
+    /// Parses a [`Config`] from a YAML document, overlaid over the [`Default`]
+    /// values via `#[serde(default)]` on absent fields.
     pub fn from_yaml(text: &str) -> Result<Self, serde_yaml_ng::Error> {
         serde_yaml_ng::from_str(text)
     }
@@ -224,31 +238,28 @@ impl Config {
         })
     }
 
-    /// Overlays a [`ConfigLayer`] onto `self`, replacing only the fields the
-    /// layer provides.
-    fn apply(&mut self, layer: ConfigLayer) {
-        if let Some(v) = layer.config_version {
+    /// Overlays the parsed config file onto `self`, replacing only the fields
+    /// the file actually provides.
+    fn overlay_file(&mut self, file: ConfigFile) {
+        if let Some(v) = file.config_version {
             self.config_version = v;
         }
-        if let Some(v) = layer.api_url {
+        if let Some(v) = file.api_url {
             self.api_url = v;
         }
-        if let Some(v) = layer.output_dir {
+        if let Some(v) = file.output_dir {
             self.output_dir = v;
         }
-        if let Some(v) = layer.access_key {
+        if let Some(v) = file.access_key {
             self.access_key = v;
         }
-        if let Some(v) = layer.secret_key {
+        if let Some(v) = file.secret_key {
             self.secret_key = v;
         }
-        if let Some(v) = layer.output_file_name {
-            self.output_file_name = v;
-        }
-        if let Some(v) = layer.operation_slug {
+        if let Some(v) = file.operation_slug {
             self.operation_slug = v;
         }
-        if let Some(v) = layer.recording_shell {
+        if let Some(v) = file.recording_shell {
             self.recording_shell = v;
         }
     }
@@ -270,11 +281,11 @@ impl fmt::Display for Config {
     }
 }
 
-/// Reads and parses the config file into a partial layer.
+/// Reads and parses the config file into a partial [`ConfigFile`].
 ///
-/// Returns `Ok(None)` when the file does not exist (not an error: the other
-/// layers still apply).
-fn file_layer(path: &Path) -> Result<Option<ConfigLayer>, ConfigError> {
+/// Returns `Ok(None)` when the file does not exist (not an error: the defaults
+/// still apply and CLI flags still override).
+fn read_config_file(path: &Path) -> Result<Option<ConfigFile>, ConfigError> {
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -291,16 +302,6 @@ fn file_layer(path: &Path) -> Result<Option<ConfigLayer>, ConfigError> {
             path: path.to_path_buf(),
             source,
         })
-}
-
-/// Builds the CLI layer. Absent flags (`None`) do not override earlier layers.
-fn cli_layer(cli: &Cli) -> ConfigLayer {
-    ConfigLayer {
-        operation_slug: cli.operation.clone(),
-        recording_shell: cli.shell.clone(),
-        output_file_name: cli.name.clone(),
-        ..ConfigLayer::default()
-    }
 }
 
 /// Returns the platform configuration directory for aterm.
@@ -345,27 +346,28 @@ mod tests {
     }
 
     #[test]
-    fn empty_yaml_layers_over_defaults() {
+    fn empty_yaml_overlays_over_defaults() {
         let cfg = Config::from_yaml("{}").expect("empty map parses");
         assert!(cfg.api_url.is_empty());
     }
 
-    /// REQUIRED: all three layers set the same field to three distinct values;
-    /// the CLI value must win end-to-end (defaults < file < cli).
+    /// REQUIRED: defaults, file, and CLI each set the same field to distinct
+    /// values; the CLI value must win end-to-end (defaults < file < cli).
     #[test]
-    fn three_layer_precedence_cli_wins() {
+    fn precedence_cli_overrides_file_overrides_default() {
         let path = temp_path("precedence");
-        // File layer sets recording_shell (and operation_slug, exercised below).
+        // The config file sets recording_shell (and operation_slug, exercised
+        // below).
         fs::write(
             &path,
             "recordingShell: file-shell\noperationSlug: file-op\napiURL: file-url\n",
         )
         .expect("write temp config");
 
-        // CLI layer overrides recording_shell only.
+        // The CLI overrides recording_shell only.
         let cli = Cli::parse_from(["aterm", "--shell", "cli-shell"]);
 
-        let cfg = Config::load_from(&path, &cli).expect("layered load");
+        let cfg = Config::load_from(&path, &cli).expect("load");
 
         // The contested field: file and CLI both set it; CLI wins.
         assert_eq!(cfg.recording_shell, "cli-shell", "cli must win for shell");
@@ -379,10 +381,41 @@ mod tests {
             cfg.api_url, "file-url",
             "file value survives when cli absent"
         );
-        // No layer touched this one; the built-in default survives.
+        // Nothing touched this one; the built-in default survives.
         assert_eq!(
             cfg.config_version, 1,
-            "default survives when no layer overrides"
+            "default survives when nothing overrides"
+        );
+
+        fs::remove_file(&path).ok();
+    }
+
+    /// `output_file_name` is CLI/default-only: a YAML key for it is ignored, but
+    /// `--name` sets it.
+    #[test]
+    fn output_file_name_is_cli_only_never_file_sourced() {
+        let path = temp_path("output-name-asymmetry");
+        // Even if the file tries to set output_file_name (under any plausible
+        // key), it must not be sourced from the file.
+        fs::write(
+            &path,
+            "outputFileName: from-file\noutput_file_name: from-file\n",
+        )
+        .expect("write temp config");
+
+        // No --name flag: output_file_name stays the default (empty).
+        let cfg = Config::load_from(&path, &empty_cli()).expect("load");
+        assert!(
+            cfg.output_file_name.is_empty(),
+            "file must not source output_file_name"
+        );
+
+        // --name sets it.
+        let cli = Cli::parse_from(["aterm", "--name", "cli-name"]);
+        let cfg = Config::load_from(&path, &cli).expect("load");
+        assert_eq!(
+            cfg.output_file_name, "cli-name",
+            "--name sets output_file_name"
         );
 
         fs::remove_file(&path).ok();
