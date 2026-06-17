@@ -46,6 +46,17 @@ pub struct Credentials {
     pub secret_key: String,
 }
 
+/// Decodes a base64 (standard alphabet) secret key into its raw bytes.
+///
+/// This is the single source of truth for how a stored secret key is decoded:
+/// both request signing and config validation go through it, so they agree
+/// byte-for-byte on what counts as a well-formed secret.
+pub fn decode_secret_key(secret_key: &str) -> Result<Vec<u8>, SigningError> {
+    STANDARD
+        .decode(secret_key.as_bytes())
+        .map_err(|_| SigningError::InvalidSecret)
+}
+
 /// Computes the `Authorization` header value for an ASHIRT API request.
 ///
 /// `request_uri` is the path including any query string. `date` is the value of
@@ -59,9 +70,7 @@ pub fn sign_request(
     date: &str,
     body: &[u8],
 ) -> Result<String, SigningError> {
-    let secret_bytes = STANDARD
-        .decode(creds.secret_key.as_bytes())
-        .map_err(|_| SigningError::InvalidSecret)?;
+    let secret_bytes = decode_secret_key(&creds.secret_key)?;
 
     // Canonical request: METHOD \n REQUEST_URI \n DATE \n SHA256(body).
     // The body digest is the raw 32 digest bytes, appended directly.

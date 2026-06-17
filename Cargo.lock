@@ -75,6 +75,7 @@ dependencies = [
  "serde_yaml_ng",
  "sha2",
  "thiserror",
+ "url",
 ]
 
 [[package]]

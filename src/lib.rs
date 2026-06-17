@@ -18,6 +18,7 @@ pub mod asciicast;
 pub mod ashirt;
 pub mod cli;
 pub mod config;
+pub mod config_setup;
 pub mod recorder;
 pub mod tui;
 pub mod update;
