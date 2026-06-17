@@ -20,13 +20,17 @@ hmac = "0.13.0"
 httpdate = "1.0.3"
 inquire = "0.9.4"
 portable-pty = "0.9.0"
-reqwest = { version = "0.12.28", features = ["blocking", "json", "multipart"] }
+# Pinned to the BLOCKING client: this crate is intentionally async-runtime-free.
+# reqwest's `blocking` feature drives requests on reqwest's own internal runtime,
+# so bumping the major (0.12 -> 0.13) keeps the project blocking-only — we never
+# touch the async API.
+reqwest = { version = "0.13.4", features = ["blocking", "json", "multipart"] }
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
+serde_json = "1.0.150"
 serde_yaml_ng = "0.10.0"
 sha2 = "0.11.0"
 thiserror = "2.0.18"
-url = "2.5.4"
+url = "2.5.8"
 
 # SIGWINCH-driven resize detection and raw stdin polling on Unix; see src/recorder/unix.rs.
 [target.'cfg(unix)'.dependencies]
