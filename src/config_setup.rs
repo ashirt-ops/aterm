@@ -170,14 +170,69 @@ fn seed_if_empty(target: &mut String, value: Option<&str>) {
     }
 }
 
-/// Path to the ASHIRT desktop application's config (`<config>/ashirt/config.json`).
+/// File name of the ASHIRT desktop app config inside its `ashirt` directory.
+const ASHIRT_CONFIG_FILE: &str = "config.json";
+
+/// Computes the ASHIRT desktop-app config search paths on macOS, in priority
+/// order, given the user's home directory and `$XDG_CONFIG_HOME`.
 ///
-/// Uses the same per-user config base as aterm's own config (see
-/// [`crate::config::config_dir`]) but under the sibling `ashirt` directory,
-/// matching the Go `ASHIRTConfigPath`.
+/// Pure over its inputs so the macOS behaviour is unit-testable on Linux CI.
+///
+/// The ASHIRT desktop application (an Electron GUI) stores its config under
+/// `~/Library/Application Support/ashirt` on macOS — NOT under XDG `~/.config`.
+/// So even though aterm's OWN config moved to `~/.config/aterm` (see
+/// [`crate::config::config_dir`]), this lookup must stay pointed at Application
+/// Support first. `~/.config/ashirt` (honouring `$XDG_CONFIG_HOME`) is checked
+/// as a secondary, in case a user keeps the ASHIRT config alongside aterm's.
+#[cfg(any(target_os = "macos", test))]
+fn macos_ashirt_config_paths(home: &Path, xdg_config_home: Option<&str>) -> Vec<PathBuf> {
+    let app_support = home
+        .join("Library")
+        .join("Application Support")
+        .join("ashirt")
+        .join(ASHIRT_CONFIG_FILE);
+    let xdg_base = match xdg_config_home {
+        Some(x) if !x.is_empty() => PathBuf::from(x),
+        _ => home.join(".config"),
+    };
+    let xdg = xdg_base.join("ashirt").join(ASHIRT_CONFIG_FILE);
+    vec![app_support, xdg]
+}
+
+/// ASHIRT desktop-app config search paths, in priority order.
+///
+/// * macOS: `~/Library/Application Support/ashirt/config.json` (the desktop
+///   app's real Electron location), then `~/.config/ashirt/config.json` as a
+///   secondary. The primary deliberately does NOT follow aterm's own XDG move.
+/// * Linux/Windows: the single per-user config base location
+///   (`<config>/ashirt/config.json`), matching the Go `ASHIRTConfigPath`.
+fn ashirt_config_paths() -> Result<Vec<PathBuf>, ConfigError> {
+    #[cfg(target_os = "macos")]
+    {
+        let base = directories::BaseDirs::new().ok_or(ConfigError::NoConfigDir)?;
+        let xdg = std::env::var("XDG_CONFIG_HOME").ok();
+        Ok(macos_ashirt_config_paths(base.home_dir(), xdg.as_deref()))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let base = directories::BaseDirs::new().ok_or(ConfigError::NoConfigDir)?;
+        Ok(vec![
+            base.config_dir().join("ashirt").join(ASHIRT_CONFIG_FILE),
+        ])
+    }
+}
+
+/// Path to the ASHIRT desktop application's primary config.
+///
+/// On macOS this is `~/Library/Application Support/ashirt/config.json` (the
+/// desktop app's real location); on Linux/Windows it is the per-user config
+/// base location, matching the Go `ASHIRTConfigPath`. See
+/// [`ashirt_config_paths`] for the full search order used by [`import_ashirt`].
 pub fn ashirt_config_path() -> Result<PathBuf, ConfigError> {
-    let base = directories::BaseDirs::new().ok_or(ConfigError::NoConfigDir)?;
-    Ok(base.config_dir().join("ashirt").join("config.json"))
+    ashirt_config_paths()?
+        .into_iter()
+        .next()
+        .ok_or(ConfigError::NoConfigDir)
 }
 
 /// Reads and parses the ASHIRT desktop `config.json` at `path`.
@@ -204,8 +259,14 @@ pub fn read_ashirt_import(path: &Path) -> Result<Option<AshirtImport>, ConfigErr
 /// Convenience: import from the ASHIRT desktop config and seed `cfg`'s empty
 /// fields. A missing or unparsable ASHIRT config simply leaves `cfg` unchanged.
 pub fn import_ashirt(cfg: &mut Config) -> Result<(), ConfigError> {
-    if let Some(import) = read_ashirt_import(&ashirt_config_path()?)? {
-        import.seed_empty(cfg);
+    // Try each candidate location in priority order; seed from the first that
+    // yields an importable config and stop (a later location must not override
+    // values seeded from a higher-priority one).
+    for path in ashirt_config_paths()? {
+        if let Some(import) = read_ashirt_import(&path)? {
+            import.seed_empty(cfg);
+            break;
+        }
     }
     Ok(())
 }
@@ -478,6 +539,43 @@ mod tests {
             path.ends_with("ashirt/config.json") || path.ends_with("ashirt\\config.json"),
             "unexpected ashirt config path: {}",
             path.display()
+        );
+    }
+
+    /// REQUIRED: on macOS the ASHIRT-app import must resolve to the DESKTOP
+    /// app's Application Support location — NOT aterm's new XDG `~/.config` —
+    /// regardless of `$XDG_CONFIG_HOME`. Exercised through the pure helper so it
+    /// runs on Linux CI too.
+    #[test]
+    fn macos_ashirt_import_prefers_application_support() {
+        let home = Path::new("/Users/alice");
+
+        // No XDG override: primary is Application Support, secondary is
+        // ~/.config/ashirt.
+        let paths = macos_ashirt_config_paths(home, None);
+        assert_eq!(
+            paths[0],
+            PathBuf::from("/Users/alice/Library/Application Support/ashirt/config.json"),
+            "macOS ASHIRT import must resolve to the desktop app's Application Support location"
+        );
+        assert_eq!(
+            paths[1],
+            PathBuf::from("/Users/alice/.config/ashirt/config.json"),
+            "secondary macOS ASHIRT location is ~/.config/ashirt"
+        );
+
+        // An `$XDG_CONFIG_HOME` override only moves the SECONDARY; the primary
+        // stays anchored to Application Support (the desktop app never uses XDG).
+        let paths = macos_ashirt_config_paths(home, Some("/custom/xdg"));
+        assert_eq!(
+            paths[0],
+            PathBuf::from("/Users/alice/Library/Application Support/ashirt/config.json"),
+            "XDG override must not move the primary Application Support location"
+        );
+        assert_eq!(
+            paths[1],
+            PathBuf::from("/custom/xdg/ashirt/config.json"),
+            "XDG override applies to the secondary location"
         );
     }
 }
