@@ -159,20 +159,20 @@ impl Config {
     ///
     /// Mirrors the Go `TermRecorderConfigWithDefaults`: schema version `1`, the
     /// recording shell taken from the `SHELL` environment variable, and the
-    /// output base defaulting to the user's home directory (matching the Go
-    /// `aterm` documented `outputDir` default).
+    /// output base defaulting to aterm's per-user XDG data directory.
     pub fn with_defaults() -> Self {
         Config {
             config_version: 1,
             recording_shell: std::env::var("SHELL").unwrap_or_default(),
-            // Base recordings under the user's home directory by default so a
-            // config with no file/CLI value still has a sensible, absolute
-            // output base. If the home dir cannot be determined (very unlikely),
-            // fall back to the empty string, which the file/CLI can still
+            // Recordings are *data*, so base them under aterm's per-user XDG
+            // data directory by default (`~/.local/share/aterm` on Linux,
+            // honouring `$XDG_DATA_HOME`; the platform data dir on Windows;
+            // XDG-style on macOS for consistency with `config_dir`). A config
+            // with no file/CLI value still gets a sensible, absolute output
+            // base. If no data directory can be determined (very unlikely), this
+            // falls back to the empty string, which the file/CLI can still
             // override.
-            output_dir: directories::BaseDirs::new()
-                .map(|b| b.home_dir().display().to_string())
-                .unwrap_or_default(),
+            output_dir: default_output_dir(),
             // Default ENABLED. The derived `Default` gives `false` for a bool, so
             // the enabled default lives here and is preserved by the file overlay
             // (absent in file => stays `true`).
@@ -411,6 +411,54 @@ fn xdg_config_base(xdg_config_home: Option<&str>, home: Option<&Path>) -> Option
     home.map(|h| h.join(".config"))
 }
 
+/// Resolves aterm's XDG-style data base: `$XDG_DATA_HOME` when set (and
+/// non-empty), otherwise `$HOME/.local/share`.
+///
+/// Mirrors [`xdg_config_base`]; kept as a pure function over its inputs so the
+/// macOS resolution can be unit-tested on Linux CI without touching the real
+/// environment. Returns `None` only when there is neither an XDG override nor a
+/// resolvable home directory.
+#[cfg(any(target_os = "macos", test))]
+fn xdg_data_base(xdg_data_home: Option<&str>, home: Option<&Path>) -> Option<PathBuf> {
+    if let Some(x) = xdg_data_home {
+        if !x.is_empty() {
+            return Some(PathBuf::from(x));
+        }
+    }
+    home.map(|h| h.join(".local/share"))
+}
+
+/// Returns the default `output_dir`: aterm's per-user XDG data directory
+/// (`~/.local/share/aterm` on Linux, honouring `$XDG_DATA_HOME`; the platform
+/// data dir on Windows). Recordings are data, so they live under the data dir
+/// rather than the config dir or the home directory.
+///
+/// macOS uses the XDG-style location (`$XDG_DATA_HOME` else
+/// `~/.local/share/aterm`) for consistency with [`config_dir`] rather than the
+/// native `~/Library/Application Support/aterm`.
+///
+/// Returns the empty string when no data directory can be determined (e.g.
+/// neither `$XDG_DATA_HOME` nor a home directory on macOS); the file/CLI can
+/// still set `output_dir` in that case.
+fn default_output_dir() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        let xdg = std::env::var("XDG_DATA_HOME").ok();
+        let home = directories::BaseDirs::new().map(|b| b.home_dir().to_path_buf());
+        xdg_data_base(xdg.as_deref(), home.as_deref())
+            .map(|base| base.join("aterm").display().to_string())
+            .unwrap_or_default()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Linux resolves to `~/.local/share/aterm` via the XDG data base dir
+        // (honouring `$XDG_DATA_HOME`), and Windows to its native data dir.
+        directories::BaseDirs::new()
+            .map(|b| b.data_dir().join("aterm").display().to_string())
+            .unwrap_or_default()
+    }
+}
+
 /// Returns the platform configuration directory for aterm.
 ///
 /// A plain `aterm` directory under the per-user config base:
@@ -604,23 +652,48 @@ mod tests {
         assert!(Config::with_defaults().auto_update_check);
     }
 
-    /// The built-in default for `output_dir` is a non-empty, sensible base — the
-    /// user's home directory — so recordings have an output base even with no
-    /// file/CLI value. (CI/dev environments always have a resolvable home.)
+    /// The built-in default for `output_dir` is a non-empty, sensible base —
+    /// aterm's per-user XDG data directory — so recordings have an output base
+    /// even with no file/CLI value. Recordings are data, so this is the data dir
+    /// (`~/.local/share/aterm` on Linux, honouring `$XDG_DATA_HOME`), NOT the
+    /// home directory. (CI/dev environments always have a resolvable data dir.)
     #[test]
-    fn output_dir_defaults_to_home_dir() {
-        let home = directories::BaseDirs::new()
-            .map(|b| b.home_dir().display().to_string())
-            .expect("a home directory is resolvable in the test environment");
+    fn output_dir_defaults_to_xdg_data_dir() {
         let cfg = Config::with_defaults();
         assert!(!cfg.output_dir.is_empty(), "output_dir default must be set");
-        assert_eq!(
-            cfg.output_dir, home,
-            "output_dir default must be the home directory"
+        assert!(
+            cfg.output_dir.ends_with("aterm"),
+            "output_dir default must be under an aterm/ directory, got {}",
+            cfg.output_dir
         );
+
+        // On non-macOS the default is the `directories` data dir joined with
+        // `aterm` (Linux: the XDG data dir honouring `$XDG_DATA_HOME`).
+        #[cfg(not(target_os = "macos"))]
+        {
+            let expected = directories::BaseDirs::new()
+                .map(|b| b.data_dir().join("aterm").display().to_string())
+                .expect("a data directory is resolvable in the test environment");
+            assert_eq!(
+                cfg.output_dir, expected,
+                "output_dir default must be the XDG data dir joined with aterm"
+            );
+            // On Linux with no `$XDG_DATA_HOME` override this is the canonical
+            // `~/.local/share/aterm`. (Skip the literal check if the test
+            // environment injected an override.)
+            if std::env::var_os("XDG_DATA_HOME").is_none() {
+                assert!(
+                    cfg.output_dir
+                        .replace('\\', "/")
+                        .ends_with(".local/share/aterm"),
+                    "default must be ~/.local/share/aterm, got {}",
+                    cfg.output_dir
+                );
+            }
+        }
     }
 
-    /// A config-file `outputDir` overrides the built-in home-directory default.
+    /// A config-file `outputDir` overrides the built-in data-directory default.
     #[test]
     fn output_dir_file_overrides_default() {
         let path = temp_path("output-dir-override");
@@ -629,7 +702,7 @@ mod tests {
         let cfg = Config::load_from(&path, &empty_cli()).expect("load");
         assert_eq!(
             cfg.output_dir, "/tmp/custom-recordings",
-            "file outputDir must override the home-directory default"
+            "file outputDir must override the data-directory default"
         );
 
         fs::remove_file(&path).ok();
@@ -755,5 +828,46 @@ mod tests {
     #[test]
     fn macos_config_base_none_when_no_home_no_xdg() {
         assert!(xdg_config_base(None, None).is_none());
+    }
+
+    /// The data base honours `$XDG_DATA_HOME` when set — `default_output_dir`
+    /// joins `aterm` onto this base on macOS. Exercised through the pure
+    /// [`xdg_data_base`] helper so it runs on Linux CI too (and lets us inject
+    /// the override without mutating the process environment).
+    #[test]
+    fn xdg_data_base_honors_xdg_data_home() {
+        let home = PathBuf::from("/Users/alice");
+        let base = xdg_data_base(Some("/custom/data"), Some(&home)).expect("base resolves");
+        assert_eq!(base, PathBuf::from("/custom/data"));
+        assert_eq!(base.join("aterm"), PathBuf::from("/custom/data/aterm"));
+    }
+
+    /// With no `$XDG_DATA_HOME`, the data base falls back to
+    /// `$HOME/.local/share` — i.e. the default `output_dir` resolves to
+    /// `~/.local/share/aterm`.
+    #[test]
+    fn xdg_data_base_falls_back_to_home_local_share() {
+        let home = PathBuf::from("/Users/alice");
+        let base = xdg_data_base(None, Some(&home)).expect("base resolves");
+        assert_eq!(
+            base.join("aterm"),
+            PathBuf::from("/Users/alice/.local/share/aterm")
+        );
+    }
+
+    /// An empty `$XDG_DATA_HOME` is treated as unset (per the XDG spec) and
+    /// falls back to `$HOME/.local/share`.
+    #[test]
+    fn xdg_data_base_empty_xdg_falls_back_to_home() {
+        let home = PathBuf::from("/Users/alice");
+        let base = xdg_data_base(Some(""), Some(&home)).expect("base resolves");
+        assert_eq!(base, PathBuf::from("/Users/alice/.local/share"));
+    }
+
+    /// With neither an XDG override nor a home directory, no data base can be
+    /// resolved (the default `output_dir` then falls back to the empty string).
+    #[test]
+    fn xdg_data_base_none_when_no_home_no_xdg() {
+        assert!(xdg_data_base(None, None).is_none());
     }
 }
