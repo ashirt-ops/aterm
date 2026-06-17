@@ -29,7 +29,7 @@
 //! those pure pieces into `tui`/`recorder` and are never exercised by tests.
 
 use std::collections::hash_map::RandomState;
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::hash::{BuildHasher, Hasher};
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
@@ -395,6 +395,47 @@ pub fn output_path(output_dir: &str, slug: &str, file_name: &str) -> PathBuf {
     Path::new(output_dir).join(slug).join(file_name)
 }
 
+/// Creates the recording's parent directory and opens the `.cast` file for
+/// writing, returning the open handle.
+///
+/// Security (CWE-732, gh-143): a terminal recording can contain sensitive
+/// session data, so on Unix the directory is created `0700` and the file `0600`
+/// — owner-only — with the modes applied at creation time (no chmod-after-create
+/// race). On non-Unix targets the platform defaults are used. `create_new`
+/// mirrors the Go `O_EXCL`: an existing recording is never clobbered.
+///
+/// This is factored out of [`start_recording`] (which is TTY-only) so the
+/// permission behaviour can be unit-tested without a terminal.
+fn create_recording_file(path: &Path) -> Result<File, MenuError> {
+    if let Some(parent) = path.parent() {
+        let mut builder = fs::DirBuilder::new();
+        builder.recursive(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder
+            .create(parent)
+            .map_err(|source| MenuError::CreateDir {
+                path: parent.to_path_buf(),
+                source,
+            })?;
+    }
+
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path).map_err(|source| MenuError::CreateFile {
+        path: path.to_path_buf(),
+        source,
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Interactive flow. MANUAL/TTY-ONLY: never call from tests or any headless path
 // — the prompts and the recorder both require a real terminal.
@@ -605,22 +646,7 @@ fn start_recording(
     let file_name = resolve_output_file_name(&config.output_file_name);
     let path = output_path(&config.output_dir, &slug, &file_name);
 
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|source| MenuError::CreateDir {
-            path: parent.to_path_buf(),
-            source,
-        })?;
-    }
-
-    // `create_new` mirrors the Go `O_EXCL`: never clobber an existing recording.
-    let file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&path)
-        .map_err(|source| MenuError::CreateFile {
-            path: path.clone(),
-            source,
-        })?;
+    let file = create_recording_file(&path)?;
 
     println!("Recording to {}", path.display());
     let code = record_session(&recording_shell(config), BufWriter::new(file))?;
@@ -962,5 +988,45 @@ mod tests {
         let name = resolve_output_file_name("my-recording.cast");
         let path = output_path("/recordings", "alpha", &name);
         assert_eq!(path, PathBuf::from("/recordings/alpha/my-recording.cast"));
+    }
+
+    // --- recording file permissions (CWE-732, gh-143) -------------------------
+
+    #[cfg(unix)]
+    #[test]
+    fn create_recording_file_restricts_unix_modes() {
+        use std::os::unix::fs::PermissionsExt;
+
+        // Build a unique temp target using the same path layout the recorder
+        // uses (<output_dir>/<slug>/<file>) so the test exercises the real
+        // create-dir + create-file path.
+        let base = std::env::temp_dir().join(format!(
+            "aterm-perms-{:016x}",
+            RandomState::new().build_hasher().finish()
+        ));
+        let path = output_path(
+            base.to_str().expect("temp dir path is valid UTF-8"),
+            "op-slug",
+            "recording.cast",
+        );
+
+        let file = create_recording_file(&path).expect("create recording file");
+        drop(file);
+
+        let dir = path.parent().expect("recording path has a parent");
+        let dir_mode = fs::metadata(dir)
+            .expect("dir metadata")
+            .permissions()
+            .mode();
+        let file_mode = fs::metadata(&path)
+            .expect("file metadata")
+            .permissions()
+            .mode();
+
+        assert_eq!(dir_mode & 0o777, 0o700, "recording dir must be 0700");
+        assert_eq!(file_mode & 0o777, 0o600, "recording file must be 0600");
+
+        // Clean up the whole temp tree regardless of assertion order above.
+        fs::remove_dir_all(&base).ok();
     }
 }
