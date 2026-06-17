@@ -39,6 +39,11 @@ fn main() {
         Err(e) => println!("confirm: {e}"),
     }
 
+    match tui::input("A short note") {
+        Ok(note) => println!("note: {note}"),
+        Err(e) => println!("input: {e}"),
+    }
+
     match tui::input_with_default("Your name", "anonymous") {
         Ok(name) => println!("hello, {}", tui::bold(&name)),
         Err(e) => println!("input: {e}"),

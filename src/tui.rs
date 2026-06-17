@@ -28,9 +28,13 @@ use thiserror::Error;
 /// Errors produced by interactive prompts.
 #[derive(Debug, Error)]
 pub enum TuiError {
-    /// The user aborted the prompt (Esc / Ctrl-C / EOF).
+    /// The user aborted the prompt by pressing Esc.
     #[error("prompt cancelled")]
     Cancelled,
+
+    /// The user interrupted the prompt by pressing Ctrl-C.
+    #[error("prompt interrupted")]
+    Interrupted,
 
     /// The prompt could not run (e.g. no TTY) or failed mid-flight.
     #[error("prompt failed: {0}")]
@@ -40,12 +44,8 @@ pub enum TuiError {
 impl From<InquireError> for TuiError {
     fn from(err: InquireError) -> Self {
         match err {
-            // Treat Esc and Ctrl-C uniformly as a user-initiated cancel; this
-            // mirrors the Go `dialog` package collapsing ErrInterrupt/ErrEOF
-            // into a single "kill signal".
-            InquireError::OperationCanceled | InquireError::OperationInterrupted => {
-                TuiError::Cancelled
-            }
+            InquireError::OperationCanceled => TuiError::Cancelled,
+            InquireError::OperationInterrupted => TuiError::Interrupted,
             other => TuiError::Prompt(other.to_string()),
         }
     }
@@ -221,6 +221,18 @@ mod tests {
             .filter(|label| score_contains_ci("san", label).is_some())
             .collect();
         assert_eq!(kept, ["San Antonio", "San Diego", "San Jose"]);
+    }
+
+    #[test]
+    fn canceled_maps_to_cancelled() {
+        let mapped = TuiError::from(InquireError::OperationCanceled);
+        assert!(matches!(mapped, TuiError::Cancelled));
+    }
+
+    #[test]
+    fn interrupted_maps_to_interrupted() {
+        let mapped = TuiError::from(InquireError::OperationInterrupted);
+        assert!(matches!(mapped, TuiError::Interrupted));
     }
 
     #[test]
