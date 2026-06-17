@@ -395,16 +395,54 @@ fn read_config_file(path: &Path) -> Result<Option<ConfigFile>, ConfigError> {
         })
 }
 
+/// Resolves aterm's XDG-style config base: `$XDG_CONFIG_HOME` when set (and
+/// non-empty), otherwise `$HOME/.config`.
+///
+/// Kept as a pure function over its inputs so the macOS resolution can be
+/// unit-tested on Linux CI without touching the real environment. Returns `None`
+/// only when there is neither an XDG override nor a resolvable home directory.
+#[cfg(any(target_os = "macos", test))]
+fn xdg_config_base(xdg_config_home: Option<&str>, home: Option<&Path>) -> Option<PathBuf> {
+    if let Some(x) = xdg_config_home {
+        if !x.is_empty() {
+            return Some(PathBuf::from(x));
+        }
+    }
+    home.map(|h| h.join(".config"))
+}
+
 /// Returns the platform configuration directory for aterm.
 ///
-/// A plain `aterm` directory under the per-user config base on every platform:
-/// `~/.config/aterm` (Linux), `~/Library/Application Support/aterm` (macOS),
-/// `%APPDATA%\aterm` (Windows). This matches the Go `aterm` layout; we use
-/// [`directories::BaseDirs`] rather than `ProjectDirs` because the latter would
-/// reverse-DNS the directory to `com.ashirt.aterm` on macOS.
+/// A plain `aterm` directory under the per-user config base:
+/// `~/.config/aterm` (Linux and macOS), `%APPDATA%\aterm` (Windows).
+///
+/// macOS intentionally uses the XDG-style `~/.config/aterm` location rather than
+/// the [`directories`]-crate native `~/Library/Application Support/aterm`, for
+/// CLI ergonomics and Linux/macOS consistency. This switch is deliberate and
+/// **unmigrated**: the old Application Support path is *not* read or copied, so
+/// existing macOS users re-run first-run setup. (The ASHIRT desktop-app import
+/// keeps its own Application Support lookup — see
+/// [`crate::config_setup::ashirt_config_path`].)
+///
+/// On Linux/Windows we use [`directories::BaseDirs`] rather than `ProjectDirs`
+/// because the latter would reverse-DNS the directory to `com.ashirt.aterm` on
+/// macOS; this matches the Go `aterm` layout.
 pub fn config_dir() -> Result<PathBuf, ConfigError> {
-    let base = directories::BaseDirs::new().ok_or(ConfigError::NoConfigDir)?;
-    Ok(base.config_dir().join("aterm"))
+    #[cfg(target_os = "macos")]
+    {
+        let xdg = std::env::var("XDG_CONFIG_HOME").ok();
+        let home = directories::BaseDirs::new().map(|b| b.home_dir().to_path_buf());
+        let base =
+            xdg_config_base(xdg.as_deref(), home.as_deref()).ok_or(ConfigError::NoConfigDir)?;
+        Ok(base.join("aterm"))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Linux already resolves to `~/.config/aterm` via the XDG base dir, and
+        // Windows to `%APPDATA%\aterm`; both keep their current behaviour.
+        let base = directories::BaseDirs::new().ok_or(ConfigError::NoConfigDir)?;
+        Ok(base.config_dir().join("aterm"))
+    }
 }
 
 /// Returns the full path to the aterm config file
@@ -678,5 +716,44 @@ mod tests {
         // Don't assert the platform prefix, just the trailing structure.
         let path = config_path().expect("config path");
         assert!(path.ends_with("aterm/config.yaml") || path.ends_with("aterm\\config.yaml"));
+    }
+
+    /// macOS uses the XDG base, honouring `$XDG_CONFIG_HOME` when set. Exercised
+    /// through the pure [`xdg_config_base`] helper so it runs on Linux CI too;
+    /// `config_dir()` joins `aterm` onto this base on macOS.
+    #[test]
+    fn macos_config_base_honors_xdg_config_home() {
+        let home = PathBuf::from("/Users/alice");
+        let base = xdg_config_base(Some("/custom/xdg"), Some(&home)).expect("base resolves");
+        assert_eq!(base, PathBuf::from("/custom/xdg"));
+        assert_eq!(base.join("aterm"), PathBuf::from("/custom/xdg/aterm"));
+    }
+
+    /// With no `$XDG_CONFIG_HOME`, macOS falls back to `$HOME/.config` — i.e.
+    /// `config_dir()` resolves to `~/.config/aterm`.
+    #[test]
+    fn macos_config_base_falls_back_to_home_dot_config() {
+        let home = PathBuf::from("/Users/alice");
+        let base = xdg_config_base(None, Some(&home)).expect("base resolves");
+        assert_eq!(
+            base.join("aterm"),
+            PathBuf::from("/Users/alice/.config/aterm")
+        );
+    }
+
+    /// An empty `$XDG_CONFIG_HOME` is treated as unset (per the XDG spec) and
+    /// falls back to `$HOME/.config`.
+    #[test]
+    fn macos_config_base_empty_xdg_falls_back_to_home() {
+        let home = PathBuf::from("/Users/alice");
+        let base = xdg_config_base(Some(""), Some(&home)).expect("base resolves");
+        assert_eq!(base, PathBuf::from("/Users/alice/.config"));
+    }
+
+    /// With neither an XDG override nor a home directory, no base can be
+    /// resolved (surfaces as `ConfigError::NoConfigDir` in `config_dir`).
+    #[test]
+    fn macos_config_base_none_when_no_home_no_xdg() {
+        assert!(xdg_config_base(None, None).is_none());
     }
 }
