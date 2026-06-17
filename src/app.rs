@@ -18,10 +18,10 @@ pub fn run(cli: Cli) -> Result<()> {
 
     // Example of the typed-error -> anyhow boundary: `Config::load` returns a
     // `ConfigError` (thiserror); `.context(..)` lifts it into `anyhow::Error`.
-    let _config = Config::load().context("loading aterm configuration")?;
+    let config = Config::load(&cli).context("loading aterm configuration")?;
 
     if cli.print_config {
-        // TODO(aterm-8tn.4): print `_config` and return.
+        println!("{config}");
         return Ok(());
     }
 
