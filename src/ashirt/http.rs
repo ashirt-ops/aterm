@@ -123,6 +123,52 @@ impl Client {
         self.request_json(Method::POST, path, Some(bytes))
     }
 
+    /// Issues a signed `POST` to `path` with a caller-supplied `content_type`
+    /// and raw `body`, returning the raw response **without** status mapping or
+    /// body parsing.
+    ///
+    /// The HMAC signature is computed over the exact `body` bytes that are sent,
+    /// so the caller owns body construction — e.g. a serialized multipart
+    /// payload whose boundary must be reflected in `content_type`. This is the
+    /// escape hatch [`crate::ashirt::upload`] uses: reqwest's streaming
+    /// multipart never exposes its serialized bytes, but the ASHIRT scheme signs
+    /// `sha256(body)`, so the body must be materialized before signing.
+    ///
+    /// Status interpretation is left to the caller because the multipart upload
+    /// endpoint needs the non-success response body (it carries the server's
+    /// `error` field) rather than the generic [`map_status`] mapping.
+    pub fn post_signed(
+        &self,
+        path: &str,
+        content_type: &str,
+        body: Vec<u8>,
+    ) -> Result<reqwest::blocking::Response, HttpError> {
+        let full_url = format!("{}{}", self.api_url, path);
+        let url = reqwest::Url::parse(&full_url).map_err(|_| HttpError::InvalidUrl(full_url))?;
+
+        // Request URI (path plus query) exactly as it appears on the wire,
+        // mirroring the signing input used by `request_json`.
+        let mut request_uri = url.path().to_string();
+        if let Some(query) = url.query() {
+            request_uri.push('?');
+            request_uri.push_str(query);
+        }
+
+        // RFC 1123 / GMT date, identical to the header sent below.
+        let date = httpdate::fmt_http_date(SystemTime::now());
+        let authorization = signing::sign_request(&self.creds, "POST", &request_uri, &date, &body)?;
+
+        let response = self
+            .inner
+            .post(url)
+            .header(CONTENT_TYPE, content_type)
+            .header(DATE, &date)
+            .header(AUTHORIZATION, authorization)
+            .body(body)
+            .send()?;
+        Ok(response)
+    }
+
     /// Core request helper: builds the URL, signs the request, sends it, maps
     /// the status code to an error (if any), and deserializes the body.
     fn request_json<T: DeserializeOwned>(
