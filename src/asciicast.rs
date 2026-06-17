@@ -39,6 +39,10 @@ pub enum CastError {
     /// the first line of a v3 stream.
     #[error("asciicast header must be written before any event or comment")]
     HeaderNotWritten,
+    /// The header was written more than once. A v3 stream has exactly one
+    /// header, as its first line.
+    #[error("asciicast header has already been written")]
+    HeaderAlreadyWritten,
 }
 
 /// asciicast v3 stream header (the first line of the file).
@@ -218,6 +222,10 @@ impl Serialize for Event {
 /// its **absolute** timestamp. The writer tracks the previous timestamp and
 /// emits the relative interval; the first event's interval is measured from the
 /// start time supplied at construction.
+///
+/// Input timestamps are expected to be **monotonic** (the recorder feeds a
+/// monotonic clock). A non-monotonic timestamp would yield a negative interval,
+/// so the computed interval is clamped to a minimum of `0.0`.
 pub struct Writer<W: Write> {
     inner: W,
     /// Absolute time of the most recent event (or the start time before any).
@@ -238,7 +246,14 @@ impl<W: Write> Writer<W> {
     }
 
     /// Writes the stream header. Must be called exactly once, before any event.
+    ///
+    /// Returns [`CastError::HeaderAlreadyWritten`] if the header was already
+    /// written, so a second call cannot corrupt the stream with a duplicate
+    /// header line.
     pub fn write_header(&mut self, header: &Header) -> Result<(), CastError> {
+        if self.header_written {
+            return Err(CastError::HeaderAlreadyWritten);
+        }
         serde_json::to_writer(&mut self.inner, header)?;
         self.inner.write_all(b"\n")?;
         self.header_written = true;
@@ -258,7 +273,9 @@ impl<W: Write> Writer<W> {
         if !self.header_written {
             return Err(CastError::HeaderNotWritten);
         }
-        let interval = time - self.last_time;
+        // Timestamps are expected to be monotonic; clamp to avoid ever emitting
+        // a negative interval if a backwards timestamp slips through.
+        let interval = (time - self.last_time).max(0.0);
         self.last_time = time;
         let event = Event::new(interval, kind, data);
         serde_json::to_writer(&mut self.inner, &event)?;
@@ -269,6 +286,10 @@ impl<W: Write> Writer<W> {
     /// Writes a pre-computed [`Event`] verbatim (its `interval` is used as-is and
     /// the internal clock is not advanced). Prefer
     /// [`write_event`](Writer::write_event) for live recording.
+    ///
+    /// Warning: this does **not** advance the writer's clock, so mixing it with
+    /// [`write_event`](Writer::write_event) will produce intervals relative to
+    /// the last `write_event` timestamp (raw events are invisible to the clock).
     pub fn write_raw_event(&mut self, event: &Event) -> Result<(), CastError> {
         if !self.header_written {
             return Err(CastError::HeaderNotWritten);
@@ -289,8 +310,12 @@ impl<W: Write> Writer<W> {
     }
 
     /// Flushes and returns the underlying writer.
-    pub fn into_inner(self) -> W {
-        self.inner
+    ///
+    /// Flushing matters when wrapping a buffered writer (e.g. [`std::io::BufWriter`]):
+    /// without it the last events could be silently dropped.
+    pub fn into_inner(mut self) -> Result<W, CastError> {
+        self.inner.flush()?;
+        Ok(self.inner)
     }
 
     /// Borrows the underlying writer.
@@ -481,5 +506,61 @@ mod tests {
             w.write_event(0.0, EventKind::Output, "nope"),
             Err(CastError::HeaderNotWritten)
         ));
+        let event = Event::new(0.0, EventKind::Output, "nope");
+        assert!(matches!(
+            w.write_raw_event(&event),
+            Err(CastError::HeaderNotWritten)
+        ));
+    }
+
+    #[test]
+    fn writing_header_twice_is_rejected() {
+        // A second header would corrupt the stream by emitting a header object
+        // as a non-first line.
+        let mut buf = Vec::new();
+        let mut w = Writer::new(&mut buf, 0.0);
+        w.write_header(&Header::new(80, 24)).unwrap();
+        assert!(matches!(
+            w.write_header(&Header::new(80, 24)),
+            Err(CastError::HeaderAlreadyWritten)
+        ));
+        // Only the single header line was written.
+        let text = String::from_utf8(buf).unwrap();
+        assert_eq!(text.lines().count(), 1);
+    }
+
+    #[test]
+    fn backwards_timestamp_clamps_interval_to_zero() {
+        // A non-monotonic timestamp must never yield a negative interval.
+        let mut buf = Vec::new();
+        {
+            let mut w = Writer::new(&mut buf, 0.0);
+            w.write_header(&Header::new(80, 24)).unwrap();
+            w.write_event(2.0, EventKind::Output, "a").unwrap();
+            // Goes backwards relative to the previous event (2.0).
+            w.write_event(1.0, EventKind::Output, "b").unwrap();
+        }
+        let text = String::from_utf8(buf).unwrap();
+        let second_event: Value = serde_json::from_str(text.lines().nth(2).unwrap()).unwrap();
+        assert_eq!(second_event[0], 0.0);
+        assert!(second_event[0].as_f64().unwrap() >= 0.0);
+    }
+
+    #[test]
+    fn into_inner_flushes_buffered_writer() {
+        use std::io::BufWriter;
+
+        let mut buf = Vec::new();
+        {
+            let writer = BufWriter::new(&mut buf);
+            let mut w = Writer::new(writer, 0.0);
+            w.write_header(&Header::new(80, 24)).unwrap();
+            w.write_event(0.5, EventKind::Output, "hi").unwrap();
+            // into_inner must flush so the events are not dropped.
+            let _inner = w.into_inner().unwrap();
+        }
+        let text = String::from_utf8(buf).unwrap();
+        assert_eq!(text.lines().count(), 2);
+        assert!(text.lines().nth(1).unwrap().contains("\"hi\""));
     }
 }
