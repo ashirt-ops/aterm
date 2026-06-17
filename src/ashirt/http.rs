@@ -17,10 +17,10 @@
 
 use std::time::{Duration, SystemTime};
 
-use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, DATE};
 use reqwest::Method;
-use serde::de::DeserializeOwned;
+use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, DATE};
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use thiserror::Error;
 
 use super::signing::{self, Credentials, SigningError};

@@ -322,7 +322,7 @@ fn read_config_file(path: &Path) -> Result<Option<ConfigFile>, ConfigError> {
             return Err(ConfigError::Read {
                 path: path.to_path_buf(),
                 source,
-            })
+            });
         }
     };
     serde_yaml_ng::from_str(&text)

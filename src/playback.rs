@@ -112,7 +112,7 @@ fn parse_event(line: &str) -> Result<Event, PlaybackError> {
         other => {
             return Err(PlaybackError::Parse(format!(
                 "unknown event code {other:?}: {line}"
-            )))
+            )));
         }
     };
 

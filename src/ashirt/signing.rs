@@ -22,8 +22,8 @@
 //!
 //! `secret_bytes` is the base64 decoding of the credential's secret key.
 
-use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
