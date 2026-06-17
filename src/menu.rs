@@ -38,10 +38,10 @@ use thiserror::Error;
 
 use crate::ashirt::http::{Client, HttpError};
 use crate::ashirt::ops_tags::{list_operations, Operation};
-use crate::ashirt::signing::Credentials;
 use crate::config::Config;
 use crate::recorder::{record_session, RecorderError};
 use crate::tui::{self, TuiError};
+use crate::upload_menu;
 
 /// Errors produced by the menu / recording flow.
 #[derive(Debug, Error)]
@@ -58,6 +58,10 @@ pub enum MenuError {
     /// The recording session itself failed.
     #[error("recording failed")]
     Recorder(#[from] RecorderError),
+
+    /// The post-recording (upload) menu failed.
+    #[error("post-recording menu failed")]
+    UploadMenu(#[from] upload_menu::MenuError),
 
     /// The recording output directory could not be created.
     #[error("failed to create recording directory {path}")]
@@ -238,18 +242,17 @@ pub fn output_path(output_dir: &str, slug: &str, file_name: &str) -> PathBuf {
 // ---------------------------------------------------------------------------
 
 /// Runs the main menu loop. This is the entry point the application entrypoint
-/// (aterm-8tn.14) calls after configuration is resolved.
+/// (aterm-8tn.14) calls after configuration is resolved; `client` is built by the
+/// entrypoint from the resolved config and shared with the recording flow.
 ///
 /// Operations are fetched once up front (a failure is reported but non-fatal, so
 /// the menu still opens and the user can retry via "Refresh operations"). Each
 /// loop iteration prompts the main menu and dispatches the chosen action;
-/// recording returns here when it finishes, keeping menu and recording as
-/// separate phases. The loop exits on "Quit" or when the user cancels the menu
-/// prompt (Esc / Ctrl-C).
-pub fn run(config: &Config) -> Result<(), MenuError> {
-    let client = build_client(config)?;
-
-    let mut operations = match list_operations(&client) {
+/// recording returns here when it (and its post-recording menu) finishes, keeping
+/// menu and recording as separate phases. The loop exits on "Quit" or when the
+/// user cancels the menu prompt (Esc / Ctrl-C).
+pub fn run(config: &Config, client: &Client) -> Result<(), MenuError> {
+    let mut operations = match list_operations(client) {
         Ok(ops) => ops,
         Err(err) => {
             eprintln!("Unable to retrieve operations list: {err}");
@@ -267,8 +270,8 @@ pub fn run(config: &Config) -> Result<(), MenuError> {
         };
 
         match dispatch_main_menu(&selection) {
-            Some(MenuAction::StartRecording) => start_recording(config, &operations)?,
-            Some(MenuAction::RefreshOperations) => match list_operations(&client) {
+            Some(MenuAction::StartRecording) => start_recording(config, client, &operations)?,
+            Some(MenuAction::RefreshOperations) => match list_operations(client) {
                 Ok(ops) => {
                     println!("Updated operations ({} total)", ops.len());
                     operations = ops;
@@ -283,10 +286,31 @@ pub fn run(config: &Config) -> Result<(), MenuError> {
     Ok(())
 }
 
+/// Records a single session immediately, then presents the post-recording menu.
+///
+/// This is the default startup view the entrypoint (aterm-8tn.14) uses when not
+/// forced into the main menu — mirroring the Go `MenuViewRecording` start view.
+/// Operations are fetched up front; a fetch failure is reported but non-fatal, so
+/// the user still reaches the (possibly empty) operation prompt.
+pub fn record_once(config: &Config, client: &Client) -> Result<(), MenuError> {
+    let operations = match list_operations(client) {
+        Ok(ops) => ops,
+        Err(err) => {
+            eprintln!("Unable to retrieve operations list: {err}");
+            Vec::new()
+        }
+    };
+    start_recording(config, client, &operations)
+}
+
 /// Prompts for an operation and records a session against it, writing the cast
-/// to `<output_dir>/<slug>/<file_name>` and returning to the caller (the menu
-/// loop) when the recording finishes.
-fn start_recording(config: &Config, operations: &[Operation]) -> Result<(), MenuError> {
+/// to `<output_dir>/<slug>/<file_name>`, then presents the post-recording upload
+/// menu before returning to the caller (the menu loop or the entrypoint).
+fn start_recording(
+    config: &Config,
+    client: &Client,
+    operations: &[Operation],
+) -> Result<(), MenuError> {
     if operations.is_empty() {
         println!("Unable to record: no operations available (try \"Refresh operations\").");
         return Ok(());
@@ -339,16 +363,15 @@ fn start_recording(config: &Config, operations: &[Operation]) -> Result<(), Menu
         path.display()
     );
 
-    Ok(())
-}
+    // Present the post-recording menu (upload / rename / discard). Backing out of
+    // it (Esc / Ctrl-C) returns to the caller rather than surfacing as an error.
+    match upload_menu::post_recording_menu(client, &slug, &path) {
+        Ok(()) => {}
+        Err(upload_menu::MenuError::Tui(TuiError::Cancelled | TuiError::Interrupted)) => {}
+        Err(err) => return Err(err.into()),
+    }
 
-/// Builds the ASHIRT API client from the resolved configuration.
-fn build_client(config: &Config) -> Result<Client, HttpError> {
-    let creds = Credentials {
-        access_key: config.access_key.clone(),
-        secret_key: config.secret_key.clone(),
-    };
-    Client::new(&config.api_url, creds)
+    Ok(())
 }
 
 /// Picks the shell to record: the configured shell, falling back to `$SHELL`,
