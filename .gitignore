@@ -6,14 +6,10 @@
 .vscode
 .idea
 
-# Private Files
-conf.yaml
-
 # Rust
 /target
 
 # Others
-cmd/aterm/aterm
 dist
 .env
 .tool-versions
