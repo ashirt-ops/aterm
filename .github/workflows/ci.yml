@@ -1,3 +1,10 @@
+# Rust CI for the aterm Rust rewrite.
+#
+# This is the workflow for the Rust crate (build/test/clippy/fmt across
+# Linux/macOS/Windows, plus tag-triggered release binaries). The legacy Go
+# workflow lives in `ci.yaml` and still builds the original Go sources on
+# pushes/PRs to `main`. Both run today; see README / WORKFLOWS.md for the
+# migration plan. Do NOT delete the Go workflow until the rewrite lands on main.
 name: Rust CI
 
 on:
@@ -29,6 +36,11 @@ jobs:
       - name: Build
         run: cargo build --all-targets --verbose
 
+      # Exercise the optional avt/playback path so it stays compiling on every
+      # OS; the default feature set above does not pull in `avt`.
+      - name: Build (playback feature)
+        run: cargo build --features playback --verbose
+
       - name: Test
         run: cargo test --verbose
 
@@ -37,3 +49,51 @@ jobs:
 
       - name: Rustfmt
         run: cargo fmt --all -- --check
+
+  # Optimized release binaries for each OS, uploaded as workflow artifacts.
+  # Runs only on version tags (v*). Publishing these to a GitHub Release is
+  # handled separately once the rewrite is the shipping artifact.
+  release:
+    name: release binary (${{ matrix.os }})
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target_label: linux
+            bin: aterm
+          - os: macos-latest
+            target_label: macos
+            bin: aterm
+          - os: windows-latest
+            target_label: windows
+            bin: aterm.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --verbose
+
+      - name: Stage artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/release/${{ matrix.bin }}" dist/
+          cp LICENSE dist/ 2>/dev/null || true
+          cp README.md dist/ 2>/dev/null || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aterm-${{ github.ref_name }}-${{ matrix.target_label }}
+          path: dist
+          if-no-files-found: error
