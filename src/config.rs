@@ -115,6 +115,17 @@ pub struct Config {
     /// Shell to launch when recording.
     #[serde(rename = "recordingShell")]
     pub recording_shell: String,
+    /// Whether to check GitHub for a newer release on startup.
+    ///
+    /// Positive sense: `true` means the startup update check runs. It DEFAULTS
+    /// to enabled — but note the serde gotcha: a plain `bool` absent from the
+    /// YAML deserializes to `false`. The enabled default is therefore set in
+    /// [`Config::with_defaults`] and preserved through the partial
+    /// [`ConfigFile`] overlay, so a field absent from the file keeps `true`. The
+    /// in-app settings menu lets the user toggle it off (see
+    /// [`crate::menu::settings_menu`]); [`crate::app`] gates the check on it.
+    #[serde(rename = "autoUpdateCheck")]
+    pub auto_update_check: bool,
 }
 
 /// A partial view of the config file: every field is optional so that a field
@@ -139,6 +150,8 @@ struct ConfigFile {
     operation_slug: Option<String>,
     #[serde(rename = "recordingShell")]
     recording_shell: Option<String>,
+    #[serde(rename = "autoUpdateCheck")]
+    auto_update_check: Option<bool>,
 }
 
 impl Config {
@@ -150,6 +163,10 @@ impl Config {
         Config {
             config_version: 1,
             recording_shell: std::env::var("SHELL").unwrap_or_default(),
+            // Default ENABLED. The derived `Default` gives `false` for a bool, so
+            // the enabled default lives here and is preserved by the file overlay
+            // (absent in file => stays `true`).
+            auto_update_check: true,
             ..Config::default()
         }
     }
@@ -262,6 +279,9 @@ impl Config {
         if let Some(v) = file.recording_shell {
             self.recording_shell = v;
         }
+        if let Some(v) = file.auto_update_check {
+            self.auto_update_check = v;
+        }
     }
 }
 
@@ -277,7 +297,16 @@ impl fmt::Display for Config {
         writeln!(f, "\tSecret Key:      {}", self.secret_key)?;
         writeln!(f, "\tOutput Prefix:   {}", self.output_file_name)?;
         writeln!(f, "\tOperation Slug:  {}", self.operation_slug)?;
-        write!(f, "\tRecording Shell: {}", self.recording_shell)
+        writeln!(f, "\tRecording Shell: {}", self.recording_shell)?;
+        write!(
+            f,
+            "\tUpdate Check:    {}",
+            if self.auto_update_check {
+                "enabled"
+            } else {
+                "disabled"
+            }
+        )
     }
 }
 
@@ -443,6 +472,7 @@ mod tests {
             output_file_name: String::new(),
             operation_slug: "op-slug".to_string(),
             recording_shell: "/bin/zsh".to_string(),
+            auto_update_check: true,
         };
 
         let path = temp_path("round-trip");
@@ -466,6 +496,55 @@ mod tests {
         // "output").
         assert!(!yaml.contains("outputFileName"));
         assert!(!yaml.contains("output_file_name"));
+    }
+
+    /// The built-in default for the update check is ENABLED.
+    #[test]
+    fn auto_update_check_defaults_enabled() {
+        assert!(Config::with_defaults().auto_update_check);
+    }
+
+    /// REQUIRED (serde gotcha): a config file that omits `autoUpdateCheck` must
+    /// keep the enabled default rather than deserializing the bool to `false`.
+    /// This exercises the real load path (defaults + partial file overlay).
+    #[test]
+    fn absent_auto_update_field_stays_enabled() {
+        let path = temp_path("auto-update-absent");
+        // A non-empty file that does NOT mention autoUpdateCheck at all.
+        fs::write(&path, "apiURL: https://ashirt.example\n").expect("write temp config");
+
+        let cfg = Config::read_file(&path).expect("read config");
+        assert!(
+            cfg.auto_update_check,
+            "absent autoUpdateCheck must stay enabled"
+        );
+        // And via the full load path (defaults < file < cli) too.
+        let cfg = Config::load_from(&path, &empty_cli()).expect("load");
+        assert!(cfg.auto_update_check, "absent => enabled through load_from");
+
+        fs::remove_file(&path).ok();
+    }
+
+    /// The field can be turned OFF from the config file, overriding the default.
+    #[test]
+    fn auto_update_check_disabled_via_file() {
+        let path = temp_path("auto-update-off");
+        fs::write(&path, "autoUpdateCheck: false\n").expect("write temp config");
+
+        let cfg = Config::read_file(&path).expect("read config");
+        assert!(
+            !cfg.auto_update_check,
+            "autoUpdateCheck: false must disable the check"
+        );
+
+        fs::remove_file(&path).ok();
+    }
+
+    /// The field is persisted to the config file under its camelCase key.
+    #[test]
+    fn auto_update_check_is_persisted() {
+        let yaml = Config::with_defaults().to_yaml().expect("serialize");
+        assert!(yaml.contains("autoUpdateCheck"), "got {yaml}");
     }
 
     #[test]
