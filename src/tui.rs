@@ -17,9 +17,7 @@
 //! logic (option filtering / fuzzy match, input validation, styling/formatting)
 //! is factored into standalone pure functions that are unit-tested below; the
 //! interactive wrappers are thin shells that wire those pure functions into
-//! `inquire`. A runnable demo of the interactive prompts lives in
-//! `examples/tui_demo.rs` and is **manual-only** (run it yourself in a real
-//! terminal — it is never exercised by the test suite).
+//! `inquire`.
 
 use inquire::validator::Validation;
 use inquire::{Confirm, InquireError, MultiSelect, Password, PasswordDisplayMode, Select, Text};
@@ -63,7 +61,7 @@ impl From<InquireError> for TuiError {
 /// order among matches. This intentionally reproduces the Go
 /// `SearcherContainsCI` behaviour (plain substring match) rather than the fuzzy
 /// matching `inquire` ships by default, so menus filter predictably.
-pub fn score_contains_ci(input: &str, label: &str) -> Option<i64> {
+pub(crate) fn score_contains_ci(input: &str, label: &str) -> Option<i64> {
     if input.is_empty() {
         return Some(0);
     }
@@ -78,7 +76,7 @@ pub fn score_contains_ci(input: &str, label: &str) -> Option<i64> {
 ///
 /// Mirrors the validation we attach to required prompts: input is rejected if it
 /// is empty or only whitespace.
-pub fn is_non_empty(input: &str) -> bool {
+pub(crate) fn is_non_empty(input: &str) -> bool {
     !input.trim().is_empty()
 }
 
@@ -92,29 +90,14 @@ fn wrap(code: &str, s: &str) -> String {
     format!("\x1b[{code}m{s}{ANSI_RESET}")
 }
 
-/// Wraps `s` in ANSI bold.
-pub fn bold(s: &str) -> String {
-    wrap("1", s)
-}
-
 /// Wraps `s` in ANSI green.
-pub fn green(s: &str) -> String {
+pub(crate) fn green(s: &str) -> String {
     wrap("32", s)
 }
 
-/// Wraps `s` in ANSI red.
-pub fn red(s: &str) -> String {
-    wrap("31", s)
-}
-
 /// A green check mark, used to denote success / a "yes" choice.
-pub fn green_check() -> String {
+pub(crate) fn green_check() -> String {
     green("\u{2713}") // ✓
-}
-
-/// A red cross, used to denote failure / a "no" choice.
-pub fn red_cross() -> String {
-    red("\u{2717}") // ✗
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +109,7 @@ pub fn red_cross() -> String {
 /// Prompts the user to choose one of `options` via a searchable select list.
 ///
 /// Filtering is case-insensitive substring matching (see [`score_contains_ci`]).
-pub fn select(message: &str, options: &[String]) -> Result<String, TuiError> {
+pub(crate) fn select(message: &str, options: &[String]) -> Result<String, TuiError> {
     Select::new(message, options.to_vec())
         .with_scorer(&|input, _opt, value, _idx| score_contains_ci(input, value))
         .prompt()
@@ -134,21 +117,16 @@ pub fn select(message: &str, options: &[String]) -> Result<String, TuiError> {
 }
 
 /// Prompts the user to choose zero or more of `options` via a searchable
-/// multiselect list. Returns the selected labels in display order.
-pub fn multiselect(message: &str, options: &[String]) -> Result<Vec<String>, TuiError> {
-    MultiSelect::new(message, options.to_vec())
-        .with_scorer(&|input, _opt, value, _idx| score_contains_ci(input, value))
-        .prompt()
-        .map_err(TuiError::from)
-}
-
-/// Like [`multiselect`], but returns the *indices* (into the original `options`
-/// slice) of the chosen entries rather than their labels.
+/// multiselect list, returning the *indices* (into the original `options` slice)
+/// of the chosen entries rather than their labels.
 ///
 /// This lets callers map a selection back to its source by position, which is
 /// robust when option labels are not guaranteed unique (e.g. a sentinel entry
 /// that could collide with a real value).
-pub fn multiselect_indexed(message: &str, options: &[String]) -> Result<Vec<usize>, TuiError> {
+pub(crate) fn multiselect_indexed(
+    message: &str,
+    options: &[String],
+) -> Result<Vec<usize>, TuiError> {
     let chosen = MultiSelect::new(message, options.to_vec())
         .with_scorer(&|input, _opt, value, _idx| score_contains_ci(input, value))
         .raw_prompt()
@@ -158,21 +136,16 @@ pub fn multiselect_indexed(message: &str, options: &[String]) -> Result<Vec<usiz
 
 /// Asks a yes/no question, returning `true` for yes. `default` is the answer
 /// applied when the user submits an empty response.
-pub fn confirm(message: &str, default: bool) -> Result<bool, TuiError> {
+pub(crate) fn confirm(message: &str, default: bool) -> Result<bool, TuiError> {
     Confirm::new(message)
         .with_default(default)
         .prompt()
         .map_err(TuiError::from)
 }
 
-/// Prompts the user for a line of free-text input.
-pub fn input(message: &str) -> Result<String, TuiError> {
-    Text::new(message).prompt().map_err(TuiError::from)
-}
-
 /// Prompts for free-text input, pre-filling `default` (used when the user
 /// submits an empty response).
-pub fn input_with_default(message: &str, default: &str) -> Result<String, TuiError> {
+pub(crate) fn input_with_default(message: &str, default: &str) -> Result<String, TuiError> {
     Text::new(message)
         .with_default(default)
         .prompt()
@@ -180,7 +153,7 @@ pub fn input_with_default(message: &str, default: &str) -> Result<String, TuiErr
 }
 
 /// Prompts for free-text input that must be non-empty (see [`is_non_empty`]).
-pub fn required_input(message: &str) -> Result<String, TuiError> {
+pub(crate) fn required_input(message: &str) -> Result<String, TuiError> {
     Text::new(message)
         .with_validator(|s: &str| {
             if is_non_empty(s) {
@@ -195,7 +168,7 @@ pub fn required_input(message: &str) -> Result<String, TuiError> {
 
 /// Prompts for a secret value. Input is masked and no confirmation re-entry is
 /// required (this is an entry prompt, not a "set a new password" flow).
-pub fn password(message: &str) -> Result<String, TuiError> {
+pub(crate) fn password(message: &str) -> Result<String, TuiError> {
     Password::new(message)
         .with_display_mode(PasswordDisplayMode::Masked)
         .without_confirmation()
@@ -260,9 +233,7 @@ mod tests {
 
     #[test]
     fn styling_wraps_and_resets() {
-        assert_eq!(bold("hi"), "\x1b[1mhi\x1b[0m");
         assert_eq!(green("ok"), "\x1b[32mok\x1b[0m");
-        assert_eq!(red("no"), "\x1b[31mno\x1b[0m");
     }
 
     #[test]
@@ -271,10 +242,5 @@ mod tests {
         assert!(check.contains('\u{2713}'));
         assert!(check.starts_with("\x1b[32m"));
         assert!(check.ends_with(ANSI_RESET));
-
-        let cross = red_cross();
-        assert!(cross.contains('\u{2717}'));
-        assert!(cross.starts_with("\x1b[31m"));
-        assert!(cross.ends_with(ANSI_RESET));
     }
 }
