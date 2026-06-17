@@ -241,15 +241,20 @@ impl Config {
     }
 
     /// Writes this [`Config`] as YAML to `path`, creating parent directories.
+    ///
+    /// The file holds the ASHIRT API access/secret keys, so on Unix the config
+    /// directory is created `0700` and the file `0600` to keep other local
+    /// users from reading the credentials (CWE-312). On non-Unix targets the
+    /// platform defaults apply.
     pub fn write_to(&self, path: &Path) -> Result<(), ConfigError> {
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|source| ConfigError::CreateDir {
+            create_config_dir(parent).map_err(|source| ConfigError::CreateDir {
                 path: parent.to_path_buf(),
                 source,
             })?;
         }
         let yaml = self.to_yaml()?;
-        fs::write(path, yaml).map_err(|source| ConfigError::Write {
+        write_config_file(path, yaml.as_bytes()).map_err(|source| ConfigError::Write {
             path: path.to_path_buf(),
             source,
         })
@@ -307,6 +312,53 @@ impl fmt::Display for Config {
                 "disabled"
             }
         )
+    }
+}
+
+/// Creates the config directory (and any missing parents).
+///
+/// On Unix the directory is created with mode `0700` so other local users
+/// cannot traverse into it and read the credential file; an already-existing
+/// directory keeps its current mode (matching `create_dir_all`). On non-Unix
+/// targets this is a plain recursive create with the platform defaults.
+fn create_config_dir(dir: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(dir)
+    }
+    #[cfg(not(unix))]
+    {
+        fs::create_dir_all(dir)
+    }
+}
+
+/// Writes `contents` to the config file, truncating any existing file.
+///
+/// On Unix the file is created with mode `0600`; because that mode only applies
+/// to a freshly created file, an existing file is additionally tightened to
+/// `0600` via `set_permissions` so credentials are never left world-readable.
+/// On non-Unix targets this is a plain `fs::write` with the platform defaults.
+fn write_config_file(path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write as _;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?;
+        file.set_permissions(fs::Permissions::from_mode(0o600))?;
+        file.write_all(contents)
+    }
+    #[cfg(not(unix))]
+    {
+        fs::write(path, contents)
     }
 }
 
@@ -545,6 +597,39 @@ mod tests {
     fn auto_update_check_is_persisted() {
         let yaml = Config::with_defaults().to_yaml().expect("serialize");
         assert!(yaml.contains("autoUpdateCheck"), "got {yaml}");
+    }
+
+    /// REQUIRED (security, CWE-312): on Unix `write_to` must create the config
+    /// directory `0700` and the credential file `0600` so other local users
+    /// cannot read the ASHIRT API keys.
+    #[cfg(unix)]
+    #[test]
+    fn write_to_restricts_unix_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        static COUNTER: AtomicU32 = AtomicU32::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("aterm-cfg-perm-{}-{}", std::process::id(), n));
+        let path = dir.join("config.yaml");
+
+        Config::with_defaults()
+            .write_to(&path)
+            .expect("write config");
+
+        let file_mode = fs::metadata(&path)
+            .expect("file metadata")
+            .permissions()
+            .mode();
+        assert_eq!(file_mode & 0o777, 0o600, "config file must be 0600");
+
+        let dir_mode = fs::metadata(&dir)
+            .expect("dir metadata")
+            .permissions()
+            .mode();
+        assert_eq!(dir_mode & 0o777, 0o700, "config dir must be 0700");
+
+        fs::remove_file(&path).ok();
+        fs::remove_dir(&dir).ok();
     }
 
     #[test]
