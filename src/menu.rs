@@ -91,6 +91,8 @@ pub enum MenuAction {
     StartRecording,
     /// Re-fetch the operations list from the server.
     RefreshOperations,
+    /// Open the settings menu to edit and persist configuration.
+    Settings,
     /// Leave the application.
     Quit,
 }
@@ -118,6 +120,10 @@ pub const MAIN_MENU: &[MenuItem] = &[
         action: MenuAction::RefreshOperations,
     },
     MenuItem {
+        label: "Settings",
+        action: MenuAction::Settings,
+    },
+    MenuItem {
         label: "Quit",
         action: MenuAction::Quit,
     },
@@ -140,6 +146,48 @@ pub fn dispatch_main_menu(label: &str) -> Option<MenuAction> {
         .iter()
         .find(|item| item.label == label)
         .map(|item| item.action)
+}
+
+/// An action the settings menu can dispatch to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsAction {
+    /// Toggle the startup auto-update check on/off.
+    ToggleAutoUpdateCheck,
+    /// Return to the main menu.
+    Back,
+}
+
+/// The fixed label for the settings-menu "back" entry.
+const SETTINGS_BACK_LABEL: &str = "Back to main menu";
+
+/// Builds the auto-update toggle's menu label, showing its current state. The
+/// label is dynamic (it reflects `enabled`) so it lives here rather than in a
+/// static table.
+pub fn auto_update_toggle_label(enabled: bool) -> String {
+    format!(
+        "Automatic update check: {} (select to toggle)",
+        if enabled { "enabled" } else { "disabled" }
+    )
+}
+
+/// The settings-menu labels, in display order, for the current config state.
+pub fn settings_menu_labels(config: &Config) -> Vec<String> {
+    vec![
+        auto_update_toggle_label(config.auto_update_check),
+        SETTINGS_BACK_LABEL.to_string(),
+    ]
+}
+
+/// Maps a selected settings-menu label back to its [`SettingsAction`].
+///
+/// The toggle label is dynamic (it carries the current state), so anything that
+/// is not the fixed back entry is treated as the toggle.
+pub fn dispatch_settings_menu(label: &str) -> SettingsAction {
+    if label == SETTINGS_BACK_LABEL {
+        SettingsAction::Back
+    } else {
+        SettingsAction::ToggleAutoUpdateCheck
+    }
 }
 
 /// One selectable operation in the operation-selection prompt: the display label
@@ -251,7 +299,7 @@ pub fn output_path(output_dir: &str, slug: &str, file_name: &str) -> PathBuf {
 /// recording returns here when it (and its post-recording menu) finishes, keeping
 /// menu and recording as separate phases. The loop exits on "Quit" or when the
 /// user cancels the menu prompt (Esc / Ctrl-C).
-pub fn run(config: &Config, client: &Client) -> Result<(), MenuError> {
+pub fn run(config: &mut Config, client: &Client) -> Result<(), MenuError> {
     let mut operations = match list_operations(client) {
         Ok(ops) => ops,
         Err(err) => {
@@ -278,8 +326,55 @@ pub fn run(config: &Config, client: &Client) -> Result<(), MenuError> {
                 }
                 Err(err) => eprintln!("Unable to retrieve operations list: {err}"),
             },
+            Some(MenuAction::Settings) => settings_menu(config)?,
             Some(MenuAction::Quit) => break,
             None => eprintln!("Unrecognized menu selection: {selection}"),
+        }
+    }
+
+    Ok(())
+}
+
+/// Runs the in-app settings menu, letting the user edit and persist
+/// configuration. Currently exposes a single toggle for the startup auto-update
+/// check (gh-104); each change is written back via [`Config::write`] so it
+/// survives the next launch.
+///
+/// MANUAL/TTY-ONLY: drives `inquire` select prompts; the toggle/dispatch logic
+/// it relies on ([`settings_menu_labels`], [`dispatch_settings_menu`]) is pure
+/// and unit-tested. Backing out (Esc / Ctrl-C) or "Back" returns to the caller.
+pub fn settings_menu(config: &mut Config) -> Result<(), MenuError> {
+    loop {
+        let labels = settings_menu_labels(config);
+        let selection = match tui::select("Settings", &labels) {
+            Ok(selection) => selection,
+            // Backing out of settings returns to the main menu, not an error.
+            Err(TuiError::Cancelled) | Err(TuiError::Interrupted) => break,
+            Err(err) => return Err(err.into()),
+        };
+
+        match dispatch_settings_menu(&selection) {
+            SettingsAction::ToggleAutoUpdateCheck => {
+                config.auto_update_check = !config.auto_update_check;
+                // Persist immediately so the choice survives a restart.
+                match config.write() {
+                    Ok(()) => println!(
+                        "Automatic update check {}.",
+                        if config.auto_update_check {
+                            "enabled"
+                        } else {
+                            "disabled"
+                        }
+                    ),
+                    Err(err) => {
+                        // Roll back the in-memory change so the menu keeps showing
+                        // the actual persisted state.
+                        config.auto_update_check = !config.auto_update_check;
+                        eprintln!("Failed to save configuration: {err}");
+                    }
+                }
+            }
+            SettingsAction::Back => break,
         }
     }
 
@@ -404,7 +499,10 @@ mod tests {
     #[test]
     fn main_menu_labels_match_items_in_order() {
         let labels = main_menu_labels();
-        assert_eq!(labels, ["Start recording", "Refresh operations", "Quit"]);
+        assert_eq!(
+            labels,
+            ["Start recording", "Refresh operations", "Settings", "Quit"]
+        );
     }
 
     #[test]
@@ -417,7 +515,57 @@ mod tests {
             dispatch_main_menu("Refresh operations"),
             Some(MenuAction::RefreshOperations)
         );
+        assert_eq!(dispatch_main_menu("Settings"), Some(MenuAction::Settings));
         assert_eq!(dispatch_main_menu("Quit"), Some(MenuAction::Quit));
+    }
+
+    // --- settings menu --------------------------------------------------------
+
+    #[test]
+    fn auto_update_toggle_label_reflects_state() {
+        assert!(auto_update_toggle_label(true).contains("enabled"));
+        assert!(auto_update_toggle_label(false).contains("disabled"));
+    }
+
+    #[test]
+    fn settings_menu_labels_lead_with_toggle_and_end_with_back() {
+        let mut cfg = Config::with_defaults();
+        let labels = settings_menu_labels(&cfg);
+        assert_eq!(labels[0], auto_update_toggle_label(true));
+        assert_eq!(labels.last().unwrap(), "Back to main menu");
+
+        cfg.auto_update_check = false;
+        let labels = settings_menu_labels(&cfg);
+        assert_eq!(labels[0], auto_update_toggle_label(false));
+    }
+
+    #[test]
+    fn dispatch_settings_menu_maps_back_and_toggle() {
+        assert_eq!(
+            dispatch_settings_menu("Back to main menu"),
+            SettingsAction::Back
+        );
+        // Either rendering of the dynamic toggle label maps to the toggle action.
+        assert_eq!(
+            dispatch_settings_menu(&auto_update_toggle_label(true)),
+            SettingsAction::ToggleAutoUpdateCheck
+        );
+        assert_eq!(
+            dispatch_settings_menu(&auto_update_toggle_label(false)),
+            SettingsAction::ToggleAutoUpdateCheck
+        );
+    }
+
+    #[test]
+    fn settings_toggle_label_round_trips_through_dispatch() {
+        // The label the prompt would show for each state dispatches to the toggle.
+        for enabled in [true, false] {
+            let label = auto_update_toggle_label(enabled);
+            assert_eq!(
+                dispatch_settings_menu(&label),
+                SettingsAction::ToggleAutoUpdateCheck
+            );
+        }
     }
 
     #[test]

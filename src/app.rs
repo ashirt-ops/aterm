@@ -41,6 +41,28 @@ enum StartupView {
     Record,
 }
 
+/// Whether the startup update check should run or be skipped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UpdateCheck {
+    /// Perform the network update check.
+    Check,
+    /// Skip the check entirely (no network call).
+    Skip,
+}
+
+/// Decides whether to run the startup update check from the resolved config.
+///
+/// Gates the single [`notify_update`] seam on the `autoUpdateCheck` option
+/// (aterm-8tn.20 / gh-104): enabled => check; disabled => skip, making no
+/// network call. Kept pure so the gate decision is unit-tested directly.
+fn update_check(auto_update_check: bool) -> UpdateCheck {
+    if auto_update_check {
+        UpdateCheck::Check
+    } else {
+        UpdateCheck::Skip
+    }
+}
+
 /// Decides the startup view from the resolved flags and validation outcome.
 ///
 /// Mirrors the Go climain: `--menu` (`ShowMenu`) **or** a failed validation force
@@ -72,7 +94,8 @@ pub fn run(cli: Cli) -> Result<()> {
 
     // Resolve configuration: built-in defaults < config file < CLI flags. After a
     // first run this re-reads the freshly written file, so CLI flags still win.
-    let config = Config::load(&cli).context("loading aterm configuration")?;
+    // Mutable because the in-app settings menu can edit and persist it.
+    let mut config = Config::load(&cli).context("loading aterm configuration")?;
 
     // Build the ASHIRT API client from the resolved config (base URL +
     // credentials). Mirrors the Go `network.SetBaseURL` / `SetAccessKey`.
@@ -88,9 +111,13 @@ pub fn run(cli: Cli) -> Result<()> {
         }
     };
 
-    // Update check. Kept as a single call site so aterm-8tn.20 can later gate it
-    // behind a config flag; for now it always checks.
-    notify_update();
+    // Update check, gated on the `autoUpdateCheck` option (gh-104). A single call
+    // site / single decision point: when disabled we skip it entirely (no
+    // network). Development builds skip inside `notify_update` regardless.
+    match update_check(config.auto_update_check) {
+        UpdateCheck::Check => notify_update(),
+        UpdateCheck::Skip => {}
+    }
 
     // `--print-config` prints the resolved config and exits, after validation and
     // the update notice (matching the Go ordering).
@@ -100,7 +127,7 @@ pub fn run(cli: Cli) -> Result<()> {
     }
 
     match startup_view(cli.menu, validation_ok) {
-        StartupView::Menu => menu::run(&config, &client).context("main menu")?,
+        StartupView::Menu => menu::run(&mut config, &client).context("main menu")?,
         StartupView::Record => menu::record_once(&config, &client).context("recording session")?,
     }
 
@@ -187,6 +214,28 @@ fn report_upgrades(result: &UpgradeResult) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- update-check gate decision -------------------------------------------
+
+    #[test]
+    fn update_check_runs_when_enabled() {
+        assert_eq!(update_check(true), UpdateCheck::Check);
+    }
+
+    #[test]
+    fn update_check_skips_when_disabled() {
+        assert_eq!(update_check(false), UpdateCheck::Skip);
+    }
+
+    /// The gate reads the resolved config: a default config checks; disabling the
+    /// option skips.
+    #[test]
+    fn update_check_follows_config_flag() {
+        let mut cfg = Config::with_defaults();
+        assert_eq!(update_check(cfg.auto_update_check), UpdateCheck::Check);
+        cfg.auto_update_check = false;
+        assert_eq!(update_check(cfg.auto_update_check), UpdateCheck::Skip);
+    }
 
     // --- startup-view decision ------------------------------------------------
 
