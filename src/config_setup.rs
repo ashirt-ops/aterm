@@ -382,10 +382,13 @@ mod tests {
             output_dir: Some("/imported/dir".to_string()),
         };
 
-        // api_url already set: import must NOT clobber it. Others are empty and
-        // should be filled.
+        // api_url already set: import must NOT clobber it. The remaining fields
+        // are cleared so the "seed only empty fields" behaviour is exercised —
+        // note `with_defaults` now pre-fills `output_dir` with the home dir, so
+        // it is emptied here to test seeding into an empty field.
         let mut cfg = Config {
             api_url: "https://existing.example".to_string(),
+            output_dir: String::new(),
             ..Config::with_defaults()
         };
         import.seed_empty(&mut cfg);
@@ -447,12 +450,18 @@ mod tests {
         assert_eq!(soft.access_key, "saved-access");
         assert_eq!(soft.output_dir, "/saved/dir");
 
-        // Hard reset: existing ignored, back to defaults (empty creds).
+        // Hard reset: existing ignored, back to defaults (empty creds). The
+        // saved output_dir is dropped in favour of the built-in default (the
+        // home directory), not the saved "/saved/dir".
         let hard = wizard_seed(Some(&existing), true);
         assert!(hard.api_url.is_empty());
         assert!(hard.access_key.is_empty());
         assert!(hard.secret_key.is_empty());
-        assert!(hard.output_dir.is_empty());
+        assert_ne!(
+            hard.output_dir, "/saved/dir",
+            "hard reset drops the saved output_dir"
+        );
+        assert_eq!(hard.output_dir, Config::with_defaults().output_dir);
         assert_eq!(hard, Config::with_defaults());
     }
 
