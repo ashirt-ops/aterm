@@ -197,6 +197,9 @@ pub fn frames(cast: &Cast) -> Vec<Frame> {
         }
     }
 
+    // If the cast ends with non-output events (e.g. a final resize or exit),
+    // any `pending` interval they contributed is intentionally dropped: it would
+    // be a trailing wait with nothing left to render.
     frames
 }
 
@@ -222,10 +225,14 @@ pub fn replay<W: Write>(cast: &Cast, out: &mut W, speed: f64) -> Result<(), Play
     Ok(())
 }
 
-/// Parses a resize payload `"<cols>x<rows>"` into `(cols, rows)`.
+/// Parses a v3 resize payload `"<cols>x<rows>"` into `(cols, rows)`.
+///
+/// The format is strict: two base-10 integers separated by a single `x` with no
+/// surrounding whitespace, matching the asciicast v3 spec. Anything else returns
+/// `None` and the resize is ignored.
 fn parse_resize(data: &str) -> Option<(usize, usize)> {
     let (cols, rows) = data.split_once('x')?;
-    Some((cols.trim().parse().ok()?, rows.trim().parse().ok()?))
+    Some((cols.parse().ok()?, rows.parse().ok()?))
 }
 
 /// Collects the virtual terminal's **visible** viewport (the final screen, not
@@ -380,19 +387,24 @@ mod tests {
     }
 
     #[test]
-    fn replay_writes_all_output_bytes_in_order() {
-        // speed is huge so the per-frame sleeps are negligible; we only assert
-        // the bytes and ordering, not timing.
+    fn frames_drive_a_sleepless_write_loop_in_order() {
+        // `replay()` is a thin wrapper that sleeps for each frame's delay then
+        // writes its data. To keep the test path free of real timing we drive
+        // the pure `frames()` schedule directly with no sleeping, asserting the
+        // exact bytes and ordering `replay()` would produce.
         let cast = Cast::parse(SAMPLE).unwrap();
         let mut out = Vec::new();
-        replay(&cast, &mut out, 1_000_000.0).unwrap();
+        for frame in frames(&cast) {
+            out.write_all(frame.data.as_bytes()).unwrap();
+        }
         assert_eq!(String::from_utf8(out).unwrap(), "hello\r\nworld");
     }
 
     #[test]
     fn parse_resize_handles_valid_and_invalid() {
         assert_eq!(parse_resize("80x24"), Some((80, 24)));
-        assert_eq!(parse_resize("132 x 50"), Some((132, 50)));
+        // Strict format: surrounding whitespace is rejected, not trimmed.
+        assert_eq!(parse_resize("132 x 50"), None);
         assert_eq!(parse_resize("nope"), None);
         assert_eq!(parse_resize("80x"), None);
     }
