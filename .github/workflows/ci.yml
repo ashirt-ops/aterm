@@ -1,26 +1,73 @@
 # CI for the aterm Rust crate.
 #
-# Builds/tests/clippy/fmt across Linux/macOS/Windows. Tag-triggered release
-# binaries live in a separate workflow (.github/workflows/release.yml). The
-# legacy Go workflow was removed when the Rust rewrite replaced the Go
-# implementation.
-name: Rust CI
+# Runs build/test/clippy/fmt across Linux/macOS/Windows on every push and pull
+# request, and on every run produces optimized release binaries that are stored
+# as downloadable workflow artifacts. On pushes it also publishes GitHub
+# Releases: a rolling "continuous" prerelease from `main`, and a versioned
+# release for `v*` tags. This mirrors the continuous build in the ashirt repo.
+#
+# (This file merges the former ci.yml + release.yml workflows.)
+name: CI
 
 on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Derive a friendly artifact name and figure out what kind of run this is.
+  # YAML can't do shell interpolation, so we compute these once here and feed
+  # them to downstream jobs as outputs.
+  run-info:
+    name: Gather run info
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.info.outputs.name }}
+      isContinuous: ${{ steps.info.outputs.isContinuous }}
+      isRelease: ${{ steps.info.outputs.isRelease }}
+    steps:
+      - name: Calculate run info
+        id: info
+        shell: bash
+        run: |
+          CONTINUOUS="false"
+          RELEASE="false"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+              RELEASE="true"
+              NAME="$GITHUB_REF_NAME"
+          elif [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
+              CONTINUOUS="true"
+              NAME="continuous"
+          else
+              # Sanitize branch/PR refs (e.g. "159/merge") for use in artifact names.
+              NAME="${GITHUB_REF_NAME//\//-}"
+          fi
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "isContinuous=$CONTINUOUS" >> "$GITHUB_OUTPUT"
+          echo "isRelease=$RELEASE" >> "$GITHUB_OUTPUT"
+
   build:
     name: build / test / lint (${{ matrix.os }})
+    needs: run-info
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            target_label: linux
+            bin: aterm
+          - os: macos-latest
+            target_label: macos
+            bin: aterm
+          - os: windows-latest
+            target_label: windows
+            bin: aterm.exe
     steps:
       - uses: actions/checkout@v6
 
@@ -41,3 +88,58 @@ jobs:
 
       - name: Rustfmt
         run: cargo fmt --all -- --check
+
+      - name: Build release binary
+        run: cargo build --release --verbose
+
+      - name: Stage artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/release/${{ matrix.bin }}" dist/
+          cp LICENSE dist/ 2>/dev/null || true
+          cp README.md dist/ 2>/dev/null || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: aterm-${{ needs.run-info.outputs.name }}-${{ matrix.target_label }}
+          path: dist
+          if-no-files-found: error
+
+  # Publish GitHub Releases. Only runs on pushes (never pull requests): a
+  # rolling prerelease for main, and a versioned release for v* tags.
+  release:
+    name: Release
+    needs: [run-info, build]
+    if: >-
+      github.event_name == 'push' &&
+      (needs.run-info.outputs.isContinuous == 'true' || needs.run-info.outputs.isRelease == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Deploy continuous build
+        if: needs.run-info.outputs.isContinuous == 'true'
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "continuous"
+          prerelease: true
+          title: "Continuous Build"
+          files: artifacts/aterm-*/*
+
+      - name: Deploy tagged release
+        if: needs.run-info.outputs.isRelease == 'true'
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: ${{ github.ref_name }}
+          prerelease: false
+          title: ${{ github.ref_name }}
+          files: artifacts/aterm-*/*
