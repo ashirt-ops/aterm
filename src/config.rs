@@ -157,13 +157,14 @@ struct ConfigFile {
 impl Config {
     /// Returns the built-in defaults — the lowest-precedence source.
     ///
-    /// Mirrors the Go `TermRecorderConfigWithDefaults`: schema version `1`, the
-    /// recording shell taken from the `SHELL` environment variable, and the
+    /// Mirrors the Go `TermRecorderConfigWithDefaults`: schema version `1`, a
+    /// platform-appropriate recording shell (see [`default_shell`] — `$SHELL` on
+    /// Unix, PowerShell on Windows, preferring `pwsh` when installed), and the
     /// output base defaulting to aterm's per-user XDG data directory.
     pub fn with_defaults() -> Self {
         Config {
             config_version: 1,
-            recording_shell: std::env::var("SHELL").unwrap_or_default(),
+            recording_shell: default_shell(),
             // Recordings are *data*, so base them under aterm's per-user XDG
             // data directory by default (`~/.local/share/aterm` on Linux,
             // honouring `$XDG_DATA_HOME`; the platform data dir on Windows;
@@ -457,6 +458,54 @@ fn default_output_dir() -> String {
             .map(|b| b.data_dir().join("aterm").display().to_string())
             .unwrap_or_default()
     }
+}
+
+/// Returns the platform-appropriate default recording shell.
+///
+/// * Unix (Linux/macOS): the user's login shell from `$SHELL`, falling back to
+///   `/bin/sh` when it is unset or empty. This is what "pull whatever the
+///   `SHELL` environment variable is" means at configuration time.
+/// * Windows: PowerShell 7 (`pwsh.exe`) when it is on `PATH`, otherwise Windows
+///   PowerShell (`powershell.exe`). Windows has no `$SHELL`, and `%COMSPEC%`
+///   points at the legacy `cmd.exe`, so PowerShell is the saner modern default.
+///   `pwsh` is preferred because aterm forwards its environment to the child:
+///   when launched from `pwsh`, the inherited `PSModulePath` points at
+///   PowerShell 7's modules, which breaks module loading (PSReadLine included)
+///   in a Windows PowerShell 5.1 child. Launching `pwsh` keeps the shell and its
+///   `PSModulePath` consistent; `powershell.exe` is the always-present fallback.
+///
+/// Always returns a non-empty value, so it doubles as the last-resort fallback
+/// when no shell is configured (see [`crate::menu`]).
+pub fn default_shell() -> String {
+    #[cfg(windows)]
+    {
+        if executable_on_path("pwsh.exe") {
+            "pwsh.exe".to_string()
+        } else {
+            "powershell.exe".to_string()
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        match std::env::var("SHELL") {
+            Ok(shell) if !shell.trim().is_empty() => shell,
+            _ => "/bin/sh".to_string(),
+        }
+    }
+}
+
+/// Returns whether `exe` is found in any directory on `PATH`.
+///
+/// A minimal `which`-style lookup (no extra dependency) used to prefer
+/// `pwsh.exe` over `powershell.exe` only when PowerShell 7 is actually
+/// installed. `PATH` is split with the platform separator via
+/// [`std::env::split_paths`].
+#[cfg(windows)]
+fn executable_on_path(exe: &str) -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path).any(|dir| dir.join(exe).is_file())
 }
 
 /// Returns the platform configuration directory for aterm.
@@ -801,6 +850,38 @@ mod tests {
 
         fs::remove_file(&path).ok();
         fs::remove_dir(&dir).ok();
+    }
+
+    /// The default shell is always a non-empty, platform-appropriate value, so
+    /// `with_defaults` never seeds an empty `recording_shell` and the menu
+    /// fallback always has something to launch.
+    #[test]
+    fn default_shell_is_non_empty_and_platform_appropriate() {
+        let shell = default_shell();
+        assert!(!shell.trim().is_empty(), "default shell must be non-empty");
+
+        // Windows prefers `pwsh.exe` when on PATH, else `powershell.exe`.
+        #[cfg(windows)]
+        assert!(
+            shell == "pwsh.exe" || shell == "powershell.exe",
+            "Windows default shell must be pwsh.exe or powershell.exe, got {shell}"
+        );
+
+        // On Unix the default is `$SHELL` when set, else `/bin/sh`.
+        #[cfg(not(windows))]
+        match std::env::var("SHELL") {
+            Ok(s) if !s.trim().is_empty() => assert_eq!(
+                shell, s,
+                "Unix default shell must come from $SHELL when set"
+            ),
+            _ => assert_eq!(
+                shell, "/bin/sh",
+                "Unix default shell must fall back to /bin/sh"
+            ),
+        }
+
+        // `with_defaults` seeds the same value.
+        assert_eq!(Config::with_defaults().recording_shell, shell);
     }
 
     #[test]

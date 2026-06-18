@@ -18,9 +18,21 @@ use rustix::io::Errno;
 
 use super::StdinRead;
 
-/// Returns the user's preferred shell (`$SHELL`), falling back to `/bin/sh`.
-pub fn default_shell() -> String {
-    std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
+/// No-op terminal-mode guard on Unix.
+///
+/// Unix PTYs already deliver raw VT input and render VT output without any extra
+/// console-mode setup, so the cooked-mode clearing done by the shared
+/// [`RawModeGuard`](super::RawModeGuard) is sufficient. This type exists only so
+/// the shared recorder can install platform terminal-mode setup uniformly; its
+/// Windows counterpart configures the console's virtual-terminal modes.
+#[must_use = "kept symmetric with the Windows guard; bind it to a variable"]
+pub struct TerminalModeGuard;
+
+impl TerminalModeGuard {
+    /// Installs nothing; succeeds unconditionally.
+    pub fn install() -> io::Result<Self> {
+        Ok(Self)
+    }
 }
 
 /// Detects terminal resizes via the `SIGWINCH` signal.
