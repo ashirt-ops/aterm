@@ -12,9 +12,13 @@
 //!     `anyhow::Result` is used ONLY at the command boundary ([`app::run`] and
 //!     `main`). See [`config`] for a worked thiserror example and [`app`] for the
 //!     anyhow boundary.
-//!   * No `unsafe`: the crate is `#![forbid(unsafe_code)]`. Platform syscalls go
-//!     through safe wrappers (e.g. `rustix` on Unix).
-#![forbid(unsafe_code)]
+//!   * No `unsafe` by default: the crate is `#![deny(unsafe_code)]`. Platform
+//!     syscalls go through safe wrappers (e.g. `rustix` on Unix). The one
+//!     exception is the Windows console FFI in [`recorder::windows`] — VT
+//!     console-mode setup and cancelling the blocking stdin read — which has no
+//!     safe-wrapper equivalent and opts in via a scoped, documented
+//!     `#[allow(unsafe_code)]` on that module alone.
+#![deny(unsafe_code)]
 
 pub mod app;
 pub mod asciicast;
