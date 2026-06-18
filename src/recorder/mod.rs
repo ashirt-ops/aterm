@@ -250,10 +250,12 @@ impl Utf8Chunker {
                 }
                 Err(e) => {
                     let valid = e.valid_up_to();
-                    // SAFETY: `valid_up_to()` guarantees `rest[..valid]` is valid
-                    // UTF-8, so this avoids both a redundant re-decode and any
-                    // panic in the production output path.
-                    out.push_str(unsafe { std::str::from_utf8_unchecked(&rest[..valid]) });
+                    // `valid_up_to()` guarantees `rest[..valid]` is valid UTF-8,
+                    // so this re-decode never fails.
+                    out.push_str(
+                        std::str::from_utf8(&rest[..valid])
+                            .expect("valid_up_to guarantees validity"),
+                    );
                     match e.error_len() {
                         // Incomplete trailing sequence: carry it for next time.
                         None => {
