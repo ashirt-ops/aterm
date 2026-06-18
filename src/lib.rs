@@ -12,6 +12,9 @@
 //!     `anyhow::Result` is used ONLY at the command boundary ([`app::run`] and
 //!     `main`). See [`config`] for a worked thiserror example and [`app`] for the
 //!     anyhow boundary.
+//!   * No `unsafe`: the crate is `#![forbid(unsafe_code)]`. Platform syscalls go
+//!     through safe wrappers (e.g. `rustix` on Unix).
+#![forbid(unsafe_code)]
 
 pub mod app;
 pub mod asciicast;

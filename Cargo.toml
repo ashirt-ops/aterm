@@ -31,9 +31,10 @@ sha2 = "0.11.0"
 thiserror = "2.0.18"
 url = "2.5.8"
 
-# SIGWINCH-driven resize detection and raw stdin polling on Unix; see src/recorder/unix.rs.
+# SIGWINCH-driven resize detection and safe stdin polling on Unix; see src/recorder/unix.rs.
+# `event` gates rustix's poll(2) wrapper; read(2) lives in the default API.
 [target.'cfg(unix)'.dependencies]
-libc = "0.2"
+rustix = { version = "1.1.4", features = ["event"] }
 signal-hook = "0.4.4"
 
 [dev-dependencies]

@@ -1,6 +1,7 @@
 //! aterm binary entrypoint. Thin on purpose: parse the CLI, hand off to
 //! [`aterm::app::run`], and render any error at the `anyhow` boundary as a clean
 //! message before exiting non-zero.
+#![forbid(unsafe_code)]
 
 use clap::Parser;
 
