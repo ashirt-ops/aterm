@@ -694,6 +694,22 @@ mod tests {
                 );
             }
         }
+
+        // On macOS the `directories` data dir is `Application Support`, but
+        // since .31 aterm's own `default_output_dir` uses the XDG data base
+        // (`$XDG_DATA_HOME` else `$HOME/.local/share`) — so the default also
+        // resolves to `~/.local/share/aterm`. Mirror the Linux assertion here.
+        // (Skip the literal check if the test environment injected an override.)
+        #[cfg(target_os = "macos")]
+        if std::env::var_os("XDG_DATA_HOME").is_none() {
+            assert!(
+                cfg.output_dir
+                    .replace('\\', "/")
+                    .ends_with(".local/share/aterm"),
+                "default must be ~/.local/share/aterm, got {}",
+                cfg.output_dir
+            );
+        }
     }
 
     /// A config-file `outputDir` overrides the built-in data-directory default.
