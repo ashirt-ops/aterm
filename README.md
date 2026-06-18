@@ -1,65 +1,123 @@
-# ASHIRT Terminal Recorder (ATerm)
+# ASHIRT Terminal Recorder (aterm)
 
-ATerm provides the ability to record a terminal session in a separate pty. After recording, you can upload the file to an ASHIRT server.
+aterm records a terminal session in a separate pty and lets you upload the
+recording to an ASHIRT server. It is a single-binary Rust crate; recordings are
+written in the [asciicast v3] format.
 
-## Overview / User's Guide
+## Building & Running
 
-The terminal recorder can be started via the `aterm` binary.
+aterm builds with the standard stable Rust toolchain (install via
+[rustup](https://rustup.rs/)) on Linux, macOS, or Windows. No external build
+tooling is required — `cargo` drives everything.
 
-There are a handful of modes and options that can be supplied at startup. The application attempts to describe what it is doing, and the menus try to be intuative. This overview tries to provide some basic guidance without being overly thorough.
+```bash
+cargo build            # debug build   (target/debug/aterm)
+cargo build --release  # release build (target/release/aterm)
+cargo run              # build and run
+cargo test             # run the test suite
+```
 
-### First Run
+Before opening a pull request, run the gates CI enforces:
 
-On first run, a small dialog will run asking for various required details (API URL, Access Key, Secret Key, etc). This data is saved, though first run can be triggered again via command line options. More details on this below.
+```bash
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
 
-### Navigating Menus
+## User's Guide
 
-Menus primarily navigate through arrow keys and `j`, `k` keys. Pressing `/` will allow you to search/filter the options by name. Any case-insenstive substring will be included post-filter. Pressing `/` once more will leave search.
+Run the `aterm` binary to start. The application describes what it is doing as
+it goes; this section gives a quick orientation rather than exhaustive detail.
 
-### Starting a recording
+### First run
 
-A normal start of the `aterm` binary will attempt to start a new recording. The application will prompt you to select an operation to associate with the recording. Select an operation from the list, and the psuedo terminal will start. The terminal should behave exactly as normal.
+On first run, a short dialog collects the required details (API URL, Access Key,
+Secret Key, etc.) and saves them. If you also use the ASHIRT desktop
+application, some values can be pulled from its configuration. You can re-run
+this dialog later with `--reset` or `--reset-hard`.
 
-To exit a recording, try entering `exit` or pressing `ctrl+D` on an empty prompt.
+### Navigating menus
 
-### Uploading a recording
+Move through menus with the arrow keys or `j`/`k`. Press `/` to filter options
+by a case-insensitive substring; press `/` again to leave search.
 
-After each recording, a small menu is presented with available options:
+### Recording
 
-1. Upload Recording
-   * The primary intent after recording is to upload that recording. A small guide will prompt you to supply a description and select valid tags for this recording. After this data has been collected, you may submit this to the server. A successful submit will save the recorded metadata (e.g. description and tags) and send you to the main menu.
-2. Rename Recording File
-   * For certain cases, you may want to make the recording file a bit more permanent/memorable. In these cases, you can opt to rename the recording to any name, normal filename rules still apply.
-3. Discard Recording
-   * In sitatutions where the recording was unfruitful, you can opt to delete the recording.
-4. Return to Main Menu
-   * As the name implies, you can return to the normal menu. You can exit from here. Returning to the main menu saves the recording metadata as well.
+Starting `aterm` normally begins a new recording. You are prompted to select an
+operation to associate with the recording, after which the pseudo terminal
+starts and behaves like a normal shell. To end a recording, type `exit` or press
+`Ctrl-D` at an empty prompt.
 
-### Configuration
+### After a recording
 
-This binary supports a few configuration options, and will attempt to load from each configuration level in order to come up with a complete view of how the interaction should be handled. The configuration levels are as follows: First, load from the config file, then replace with defined values from the env vars, then replace with command line switches.
+When a recording ends, a menu offers:
 
-Additionally, on first run, if you are using the ASHIRT application, then some configuration details can be pulled from its configuration file.
+1. **Upload Recording** — supply a description and select tags, then submit to
+   the server. A successful upload saves the metadata and returns to the main
+   menu.
+2. **Rename Recording File** — give the recording a more memorable name (normal
+   filename rules apply).
+3. **Discard Recording** — delete the recording.
+4. **Return to Main Menu** — saves the recording metadata and returns to the
+   menu.
 
-The configuration file adheres to the XDG standard, where applicable. If you have XDG_CONFIG_HOME set, then your config file will be found under the `ashirt` directory. If this value is not set, then it will likely be saved to `/home/{who}/ashirt/aterm.yaml`. However, most settings can be tweaked in the application itself, by going to the main menu and choosing "Update Settings". A small guide will take you through common configuration values
+## Configuration
 
-| Config File Parameter | Env Parameter                         | CLI flag          | Meaning                                                                                               |
-| --------------------- | ------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------- |
-| outputDir             | ASHIRT_TERM_RECORDER_OUTPUT_DIR       |                   | Determines where to store recording files. Defaults to home directory                                 |
-| recordingShell        | ASHIRT_TERM_RECORDER_RECORDING_SHELL  | -shell       -s   | Which shell to use when starting up (defaults to env's SHELL)                                         |
-| operationSlug         | ASHIRT_TERM_RECORDER_OPERATION_SLUG   | -operation        | Which operation to upload to (by default -- can be selected prior to recording)                       |
-| apiURL                | ASHIRT_TERM_RECORDER_API_URL          |                   | Where the **backend** service is located.                                                             |
-| N/A                   | ASHIRT_TERM_RECORDER_OUTPUT_FILE_NAME | --name -n         | What filename to use when writing the file locally (and remotely as well)                             |
-| accessKey             | ASHIRT_TERM_RECORDER_ACCESS_KEY       | N/A               | The Access Key needed to connect with the backend (created on the frontend)                           |
-| secretKey             | ASHIRT_TERM_RECORDER_SECRET_KEY       | N/A               | The Secret Key needed to connect with the backend (created on the frontend). This is a base-64 value  |
-|                       |                                       | -menu -m          | Starts in the main menu                                                                               |
-|                       |                                       | -pring-config -pc | Prints the loaded configuration, then exits                                                           |
-|                       |                                       | -help -h          | Opens the help menu                                                                                   |
-|                       |                                       | -shell -s         | Launches the recoder with the specified shell. This should be the path to the binary                  |
-|                       |                                       | -reset            | Launches first-run to set up initial values. Uses the existing values as a base.                      |
-|                       |                                       | -reset-hard       | Launches first-run to set up initial config values. Does not use the existing configuration as a base |
+Configuration is resolved in layers, each overriding the previous: built-in
+defaults, then the config file, then command-line flags.
 
-### Known Issues
+The config file follows the XDG standard and lives at
+`<config>/aterm/config.yaml` (on Linux, `~/.config/aterm/config.yaml`, honoring
+`$XDG_CONFIG_HOME`). Most settings can also be edited from the main menu via
+"Update Settings".
 
-1. pressing the delete (not backspace) key generates a `^d` signal, causing input to fail
-2. Exiting a recording with `^d` prevents arrow keys from working when the terminal returns. this is due to the terminal being placed into application mode (rather than interactive mode). Navigation with the `j` and `k` keys will continue to work. Entering a new shell and exiting with `exit` will return the application to interactive mode.
+| Config file key  | CLI flag                  | Meaning                                                            |
+| ---------------- | ------------------------- | ----------------------------------------------------------------- |
+| `outputDir`      |                           | Where to store recording files (defaults to the XDG data dir)     |
+| `recordingShell` | `-s`, `--shell`           | Shell to launch (defaults to `$SHELL`)                            |
+| `operationSlug`  | `--operation`             | Operation to upload to (can also be selected before recording)    |
+| `apiURL`         |                           | Where the ASHIRT backend service is located                       |
+| `accessKey`      |                           | Access Key for the backend (created in the frontend)              |
+| `secretKey`      |                           | Secret Key for the backend (base-64; created in the frontend)     |
+|                  | `-n`, `--name`            | Filename to use for the recording (locally and remotely)          |
+|                  | `-m`, `--menu`            | Start in the main menu instead of recording immediately           |
+|                  | `--print-config`, `--pc`  | Print the resolved configuration, then exit                       |
+|                  | `--reset`                 | Re-run first-run setup, using existing values as a base           |
+|                  | `--reset-hard`            | Re-run first-run setup without using existing values              |
+|                  | `-h`, `--help`            | Show help                                                         |
+|                  | `--version`               | Show version information                                          |
+
+## Known issues
+
+Exiting a recording with `^d` can leave the terminal in application
+(cursor-key) mode, so arrow keys may stop working when the terminal returns.
+aterm forwards PTY output verbatim and does not reset keypad mode on teardown,
+so this depends on how the recorded shell cleans up. The `j`/`k` keys still
+navigate; entering a new shell and exiting it with `exit` restores interactive
+mode.
+
+## Architecture
+
+aterm is two programs in one: a pty recorder and an interactive uploader. The
+crate is a thin binary (`src/main.rs`) over a library (`src/lib.rs`) so the
+logic is testable without the binary target.
+
+**Recording.** The pty is driven via `portable-pty` (blocking — no async
+runtime) in `src/recorder/`, with `unix.rs` and `windows.rs` providing the
+platform specifics. Output is teed to both the user's terminal and the asciicast
+event pipeline. The [asciicast v3] format is implemented directly in
+`src/asciicast.rs` (asciinema is not a dependency): a cast is newline-delimited
+JSON whose first line is a header object and whose remaining lines are
+`[interval, code, data]` event arrays.
+
+**Uploading.** The interactive menus and prompt wrappers live in
+`src/upload_menu.rs`, `src/menu.rs`, and `src/tui.rs` (thin wrappers over the
+`inquire` prompt library). Talking to the ASHIRT backend — request signing,
+operations/tags lookups, and the multipart upload — lives under `src/ashirt/`
+(`http.rs`, `signing.rs`, `operations.rs`, `tags.rs`, `upload.rs`).
+
+Build metadata (version, commit hash, build date) is produced at build time and
+wired through CI on tagged releases; see `.github/workflows/`.
+
+[asciicast v3]: https://docs.asciinema.org/manual/asciicast/v3/

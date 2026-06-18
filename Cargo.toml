@@ -1,0 +1,41 @@
+[package]
+name = "aterm"
+version = "0.0.0"
+edition = "2024"
+# MSRV: edition 2024 requires Rust 1.85+.
+rust-version = "1.85"
+description = "ASHIRT terminal recorder (Rust rewrite)"
+license = "MIT"
+repository = "https://github.com/ashirt-ops/aterm"
+publish = false
+
+[dependencies]
+anyhow = "1.0.102"
+base64 = "0.22.1"
+clap = { version = "4.6.1", features = ["derive"] }
+crossterm = "0.29.0"
+directories = "6.0.0"
+hmac = "0.13.0"
+httpdate = "1.0.3"
+inquire = "0.9.4"
+portable-pty = "0.9.0"
+# Pinned to the BLOCKING client: this crate is intentionally async-runtime-free.
+# reqwest's `blocking` feature drives requests on reqwest's own internal runtime,
+# so bumping the major (0.12 -> 0.13) keeps the project blocking-only — we never
+# touch the async API.
+reqwest = { version = "0.13.4", features = ["blocking", "json", "multipart"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+serde_yaml_ng = "0.10.0"
+sha2 = "0.11.0"
+thiserror = "2.0.18"
+url = "2.5.8"
+
+# SIGWINCH-driven resize detection and safe stdin polling on Unix; see src/recorder/unix.rs.
+# `event` gates rustix's poll(2) wrapper; read(2) lives in the default API.
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1.1.4", features = ["event"] }
+signal-hook = "0.4.4"
+
+[dev-dependencies]
+httpmock = "0.8.3"
