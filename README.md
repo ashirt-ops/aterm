@@ -75,7 +75,7 @@ The config file follows the XDG standard and lives at
 | Config file key  | CLI flag                  | Meaning                                                            |
 | ---------------- | ------------------------- | ----------------------------------------------------------------- |
 | `outputDir`      |                           | Where to store recording files (defaults to the XDG data dir)     |
-| `recordingShell` | `-s`, `--shell`           | Shell to launch (defaults to `$SHELL`)                            |
+| `recordingShell` | `-s`, `--shell`           | Shell to launch (defaults to `$SHELL` on Unix; on Windows, `pwsh` if installed, else `powershell.exe`) |
 | `operationSlug`  | `--operation`             | Operation to upload to (can also be selected before recording)    |
 | `apiURL`         |                           | Where the ASHIRT backend service is located                       |
 | `accessKey`      |                           | Access Key for the backend (created in the frontend)              |

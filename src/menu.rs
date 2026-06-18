@@ -666,17 +666,16 @@ fn start_recording(
     Ok(())
 }
 
-/// Picks the shell to record: the configured shell, falling back to `$SHELL`,
-/// then `/bin/sh`. The configured value is normally already seeded from `$SHELL`
-/// by [`Config::with_defaults`]; this keeps a sensible last resort.
+/// Picks the shell to record: the configured shell, falling back to the
+/// platform default ([`crate::config::default_shell`] — `$SHELL` on Unix,
+/// PowerShell on Windows). The configured value is normally already seeded with
+/// that same default by [`Config::with_defaults`]; this keeps a sensible last
+/// resort when the config carries an empty shell.
 fn recording_shell(config: &Config) -> String {
     if !config.recording_shell.trim().is_empty() {
         return config.recording_shell.clone();
     }
-    match std::env::var("SHELL") {
-        Ok(shell) if !shell.trim().is_empty() => shell,
-        _ => "/bin/sh".to_string(),
-    }
+    crate::config::default_shell()
 }
 
 #[cfg(test)]
