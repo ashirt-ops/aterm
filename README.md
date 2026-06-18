@@ -39,8 +39,8 @@ this dialog later with `--reset` or `--reset-hard`.
 
 ### Navigating menus
 
-Move through menus with the arrow keys or `j`/`k`. Press `/` to filter options
-by a case-insensitive substring; press `/` again to leave search.
+Move through menus with the arrow keys. Press `/` to filter options by a
+case-insensitive substring; press `/` again to leave search.
 
 ### Recording
 
@@ -87,37 +87,5 @@ The config file follows the XDG standard and lives at
 |                  | `--reset-hard`            | Re-run first-run setup without using existing values              |
 |                  | `-h`, `--help`            | Show help                                                         |
 |                  | `--version`               | Show version information                                          |
-
-## Known issues
-
-Exiting a recording with `^d` can leave the terminal in application
-(cursor-key) mode, so arrow keys may stop working when the terminal returns.
-aterm forwards PTY output verbatim and does not reset keypad mode on teardown,
-so this depends on how the recorded shell cleans up. The `j`/`k` keys still
-navigate; entering a new shell and exiting it with `exit` restores interactive
-mode.
-
-## Architecture
-
-aterm is two programs in one: a pty recorder and an interactive uploader. The
-crate is a thin binary (`src/main.rs`) over a library (`src/lib.rs`) so the
-logic is testable without the binary target.
-
-**Recording.** The pty is driven via `portable-pty` (blocking — no async
-runtime) in `src/recorder/`, with `unix.rs` and `windows.rs` providing the
-platform specifics. Output is teed to both the user's terminal and the asciicast
-event pipeline. The [asciicast v3] format is implemented directly in
-`src/asciicast.rs` (asciinema is not a dependency): a cast is newline-delimited
-JSON whose first line is a header object and whose remaining lines are
-`[interval, code, data]` event arrays.
-
-**Uploading.** The interactive menus and prompt wrappers live in
-`src/upload_menu.rs`, `src/menu.rs`, and `src/tui.rs` (thin wrappers over the
-`inquire` prompt library). Talking to the ASHIRT backend — request signing,
-operations/tags lookups, and the multipart upload — lives under `src/ashirt/`
-(`http.rs`, `signing.rs`, `operations.rs`, `tags.rs`, `upload.rs`).
-
-Build metadata (version, commit hash, build date) is produced at build time and
-wired through CI on tagged releases; see `.github/workflows/`.
 
 [asciicast v3]: https://docs.asciinema.org/manual/asciicast/v3/
