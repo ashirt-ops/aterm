@@ -679,8 +679,11 @@ mod tests {
                 "output_dir default must be the XDG data dir joined with aterm"
             );
             // On Linux with no `$XDG_DATA_HOME` override this is the canonical
-            // `~/.local/share/aterm`. (Skip the literal check if the test
-            // environment injected an override.)
+            // `~/.local/share/aterm`. This literal is Linux-only: Windows (also
+            // matched by `not(macos)`) resolves the data dir to `%APPDATA%`, so
+            // gate it to Linux. (Skip the literal check if the test environment
+            // injected an override.)
+            #[cfg(target_os = "linux")]
             if std::env::var_os("XDG_DATA_HOME").is_none() {
                 assert!(
                     cfg.output_dir
