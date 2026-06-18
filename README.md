@@ -19,12 +19,6 @@ cargo run
 cargo test
 ```
 
-The optional terminal-playback path is gated behind the `playback` feature:
-
-```bash
-cargo build --features playback
-```
-
 ## Overview / User's Guide
 
 The terminal recorder can be started via the `aterm` binary.

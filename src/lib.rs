@@ -24,9 +24,3 @@ pub mod recorder;
 pub mod tui;
 pub mod update;
 pub mod upload_menu;
-
-// Optional playback support built on the `avt` virtual terminal. Off by default;
-// enable with `--features playback`. Kept out of the default build so the
-// scaffold (and CI) stay lean.
-#[cfg(feature = "playback")]
-pub mod playback;

@@ -34,11 +34,6 @@ jobs:
       - name: Build
         run: cargo build --all-targets --verbose
 
-      # Exercise the optional avt/playback path so it stays compiling on every
-      # OS; the default feature set above does not pull in `avt`.
-      - name: Build (playback feature)
-        run: cargo build --features playback --verbose
-
       - name: Test
         run: cargo test --verbose
 
