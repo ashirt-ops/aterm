@@ -50,7 +50,10 @@ jobs:
           elif [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
               CONTINUOUS="true"
           fi
-          if [[ -n "$MCERT" ]]; then
+          # Only import/use signing material on push events (main + v* tags).
+          # PR builds are never released, so there's no reason to expose the
+          # certificate during PR validation — keep it out of those runs.
+          if [[ -n "$MCERT" && "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
               SIGN_MAC="true"
           fi
           echo "isContinuous=$CONTINUOUS" >> "$GITHUB_OUTPUT"
