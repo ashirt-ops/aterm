@@ -4,7 +4,8 @@
 # request, and on every run produces optimized release binaries that are stored
 # as downloadable workflow artifacts. On pushes it also publishes GitHub
 # Releases: a rolling "continuous" prerelease from `main`, and a versioned
-# release for `v*` tags. This mirrors the continuous build in the ashirt repo.
+# release for `v*` tags. Publishing uses the GitHub-official `gh` CLI; every
+# action here is from the upstream actions/* org.
 #
 # (This file merges the former ci.yml + release.yml workflows.)
 name: CI
@@ -92,19 +93,32 @@ jobs:
       - name: Build release binary
         run: cargo build --release --verbose
 
-      - name: Stage artifact
+      - name: Package artifact
+        id: package
         shell: bash
         run: |
-          mkdir -p dist
-          cp "target/release/${{ matrix.bin }}" dist/
-          cp LICENSE dist/ 2>/dev/null || true
-          cp README.md dist/ 2>/dev/null || true
+          # Stage into a per-OS directory so the resulting archive has a unique
+          # name and the inner files don't collide when several archives are
+          # attached to a single GitHub Release.
+          pkg="aterm-${{ needs.run-info.outputs.name }}-${{ matrix.target_label }}"
+          mkdir -p "$pkg"
+          cp "target/release/${{ matrix.bin }}" "$pkg/"
+          cp LICENSE "$pkg/" 2>/dev/null || true
+          cp README.md "$pkg/" 2>/dev/null || true
+          if [ "$RUNNER_OS" == "Windows" ]; then
+              asset="$pkg.zip"
+              7z a "$asset" "$pkg" >/dev/null
+          else
+              asset="$pkg.tar.gz"
+              tar czf "$asset" "$pkg"
+          fi
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: aterm-${{ needs.run-info.outputs.name }}-${{ matrix.target_label }}
-          path: dist
+          path: ${{ steps.package.outputs.asset }}
           if-no-files-found: error
 
   # Publish GitHub Releases. Only runs on pushes (never pull requests): a
@@ -118,6 +132,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v8
@@ -126,20 +143,20 @@ jobs:
 
       - name: Deploy continuous build
         if: needs.run-info.outputs.isContinuous == 'true'
-        uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "continuous"
-          prerelease: true
-          title: "Continuous Build"
-          files: artifacts/aterm-*/*
+        shell: bash
+        run: |
+          # Roll the "continuous" release/tag forward to the current commit.
+          gh release delete continuous --yes --cleanup-tag || true
+          gh release create continuous artifacts/aterm-*/* \
+            --title "Continuous Build" \
+            --notes "Rolling build from the latest commit on main (${GITHUB_SHA:0:8})." \
+            --prerelease \
+            --target "$GITHUB_SHA"
 
       - name: Deploy tagged release
         if: needs.run-info.outputs.isRelease == 'true'
-        uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: ${{ github.ref_name }}
-          prerelease: false
-          title: ${{ github.ref_name }}
-          files: artifacts/aterm-*/*
+        shell: bash
+        run: |
+          gh release create "$GITHUB_REF_NAME" artifacts/aterm-*/* \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
