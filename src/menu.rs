@@ -4,7 +4,7 @@
 //! recording-start path (`recording/start_recording.go`). It ties together the
 //! existing building blocks:
 //!   * [`crate::tui`] — the searchable-select menu primitive;
-//!   * [`crate::ashirt::ops_tags::list_operations`] — operation selection;
+//!   * [`crate::ashirt::operations::list_operations`] — operation selection;
 //!   * [`crate::config`] — output directory / file name / shell;
 //!   * [`crate::recorder::record_session`] — the actual recording.
 //!
@@ -37,7 +37,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::ashirt::http::{Client, HttpError};
-use crate::ashirt::ops_tags::{Operation, list_operations};
+use crate::ashirt::operations::{Operation, list_operations};
 use crate::config::Config;
 use crate::recorder::{RecorderError, record_session};
 use crate::tui::{self, TuiError};
@@ -380,7 +380,7 @@ pub fn resolve_output_file_name(configured: &str) -> String {
 ///
 /// The random suffix keeps concurrent / repeated recordings from colliding (the
 /// output file is created with `create_new`). Like
-/// [`crate::ashirt::ops_tags::random_tag_color`], this seeds off [`RandomState`]
+/// [`crate::ashirt::tags::random_tag_color`], this seeds off [`RandomState`]
 /// rather than pulling in the `rand` crate for a single value.
 pub fn default_output_file_name() -> String {
     let r = RandomState::new().build_hasher().finish();
