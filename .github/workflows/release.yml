@@ -1,0 +1,57 @@
+# Release workflow for the aterm Rust crate.
+#
+# Builds optimized release binaries for each OS and uploads them as workflow
+# artifacts. Runs only on version tags (v*); publishing these to a GitHub
+# Release is handled separately once the rewrite is the shipping artifact.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: release binary (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target_label: linux
+            bin: aterm
+          - os: macos-latest
+            target_label: macos
+            bin: aterm
+          - os: windows-latest
+            target_label: windows
+            bin: aterm.exe
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install stable Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Build release binary
+        run: cargo build --release --verbose
+
+      - name: Stage artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/release/${{ matrix.bin }}" dist/
+          cp LICENSE dist/ 2>/dev/null || true
+          cp README.md dist/ 2>/dev/null || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: aterm-${{ github.ref_name }}-${{ matrix.target_label }}
+          path: dist
+          if-no-files-found: error
