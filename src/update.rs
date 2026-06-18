@@ -19,9 +19,16 @@
 //! considered. This mirrors the Go implementation it replaces.
 
 use std::fmt;
+use std::time::Duration;
 
 use serde::Deserialize;
 use thiserror::Error;
+
+/// Connection-establishment timeout for the update-check client.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Overall per-request timeout so an unresponsive GitHub never hangs the update
+/// check forever. Mirrors the ASHIRT client in [`crate::ashirt::http`].
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Errors produced while checking for updates.
 #[derive(Debug, Error)]
@@ -226,7 +233,12 @@ pub fn fetch_release_tags(owner: &str, repo: &str) -> Result<Vec<String>, Update
     let url = format!("https://api.github.com/repos/{owner}/{repo}/releases");
     let user_agent = concat!("aterm/", env!("CARGO_PKG_VERSION"));
 
-    let releases: Vec<GithubRelease> = reqwest::blocking::Client::new()
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(REQUEST_TIMEOUT)
+        .build()?;
+
+    let releases: Vec<GithubRelease> = client
         .get(url)
         .header(reqwest::header::USER_AGENT, user_agent)
         .header(reqwest::header::ACCEPT, "application/vnd.github+json")
