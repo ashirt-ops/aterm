@@ -18,11 +18,6 @@ use std::time::Duration;
 
 use super::StdinRead;
 
-/// Returns the user's shell. Honors `%COMSPEC%`, falling back to `cmd.exe`.
-pub fn default_shell() -> String {
-    std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string())
-}
-
 /// Detects terminal resizes by polling the console size.
 ///
 /// Windows has no `SIGWINCH`; each [`take_pending`](ResizeWatcher::take_pending)

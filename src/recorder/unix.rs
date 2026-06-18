@@ -18,11 +18,6 @@ use rustix::io::Errno;
 
 use super::StdinRead;
 
-/// Returns the user's preferred shell (`$SHELL`), falling back to `/bin/sh`.
-pub fn default_shell() -> String {
-    std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
-}
-
 /// Detects terminal resizes via the `SIGWINCH` signal.
 ///
 /// A single flag is set by the signal handler (installed once via `signal-hook`)
