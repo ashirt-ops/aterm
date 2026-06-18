@@ -71,6 +71,6 @@ The upload flow is largely interactive CLI. The menus and prompt wrappers live
 in `src/upload_menu.rs`, `src/menu.rs`, and `src/tui.rs` (thin wrappers over the
 `inquire` prompt library). Talking to the ASHIRT backend — request signing,
 operations/tags lookups, and the multipart upload itself — lives under
-`src/ashirt/` (`http.rs`, `signing.rs`, `ops_tags.rs`, `upload.rs`).
+`src/ashirt/` (`http.rs`, `signing.rs`, `operations.rs`, `tags.rs`, `upload.rs`).
 
 [asciicast v3]: https://docs.asciinema.org/manual/asciicast/v3/

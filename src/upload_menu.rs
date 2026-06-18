@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::ashirt::http::{Client, HttpError};
-use crate::ashirt::ops_tags::{self, Tag};
+use crate::ashirt::tags::{self, Tag};
 use crate::ashirt::upload::{
     CONTENT_TYPE_TERMINAL_RECORDING, Evidence, UploadError, upload_evidence,
 };
@@ -233,7 +233,7 @@ pub fn post_recording_menu(
 fn upload_flow(client: &Client, operation_slug: &str, path: &Path) -> Result<(), MenuError> {
     let description = tui::required_input("Description for this evidence")?;
 
-    let available = ops_tags::list_tags(client, operation_slug)?;
+    let available = tags::list_tags(client, operation_slug)?;
     let selected = tui::multiselect_indexed(
         "Select tags (space to toggle, enter to confirm)",
         &tag_options(&available),
@@ -242,8 +242,7 @@ fn upload_flow(client: &Client, operation_slug: &str, path: &Path) -> Result<(),
     let mut tag_ids = selected_tag_ids(&selected, &available);
     if wants_new_tag(&selected) {
         let name = tui::required_input("New tag name")?;
-        let created =
-            ops_tags::create_tag(client, operation_slug, &name, ops_tags::random_tag_color())?;
+        let created = tags::create_tag(client, operation_slug, &name, tags::random_tag_color())?;
         tag_ids.push(created.id);
     }
 
