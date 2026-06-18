@@ -21,14 +21,12 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Derive a friendly artifact name and figure out what kind of run this is.
-  # YAML can't do shell interpolation, so we compute these once here and feed
-  # them to downstream jobs as outputs.
+  # Figure out what kind of run this is. YAML can't do shell interpolation, so
+  # we compute these once here and feed them to downstream jobs as outputs.
   run-info:
     name: Gather run info
     runs-on: ubuntu-latest
     outputs:
-      name: ${{ steps.info.outputs.name }}
       isContinuous: ${{ steps.info.outputs.isContinuous }}
       isRelease: ${{ steps.info.outputs.isRelease }}
     steps:
@@ -40,15 +38,9 @@ jobs:
           RELEASE="false"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
               RELEASE="true"
-              NAME="$GITHUB_REF_NAME"
           elif [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
               CONTINUOUS="true"
-              NAME="continuous"
-          else
-              # Sanitize branch/PR refs (e.g. "159/merge") for use in artifact names.
-              NAME="${GITHUB_REF_NAME//\//-}"
           fi
-          echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "isContinuous=$CONTINUOUS" >> "$GITHUB_OUTPUT"
           echo "isRelease=$RELEASE" >> "$GITHUB_OUTPUT"
 
@@ -100,7 +92,7 @@ jobs:
           # Stage into a per-OS directory so the resulting archive has a unique
           # name and the inner files don't collide when several archives are
           # attached to a single GitHub Release.
-          pkg="aterm-${{ needs.run-info.outputs.name }}-${{ matrix.target_label }}"
+          pkg="aterm-${{ matrix.target_label }}"
           mkdir -p "$pkg"
           cp "target/release/${{ matrix.bin }}" "$pkg/"
           cp LICENSE "$pkg/" 2>/dev/null || true
@@ -117,7 +109,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: aterm-${{ needs.run-info.outputs.name }}-${{ matrix.target_label }}
+          name: aterm-${{ matrix.target_label }}
           path: ${{ steps.package.outputs.asset }}
           if-no-files-found: error
 
