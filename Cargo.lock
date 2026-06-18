@@ -132,6 +132,7 @@ dependencies = [
  "signal-hook 0.4.4",
  "thiserror 2.0.18",
  "url",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

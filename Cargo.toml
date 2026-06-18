@@ -37,5 +37,14 @@ url = "2.5.8"
 rustix = { version = "1.1.4", features = ["event"] }
 signal-hook = "0.4.4"
 
+# Console VT input/output modes for ConPTY forwarding and clean stdin-reader
+# shutdown after recording; see src/recorder/windows.rs.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Console",
+    "Win32_System_IO",
+] }
+
 [dev-dependencies]
 httpmock = "0.8.3"

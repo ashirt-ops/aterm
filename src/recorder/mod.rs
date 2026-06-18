@@ -131,6 +131,10 @@ impl PtySession {
             .map_err(|e| RecorderError::OpenPty(e.to_string()))?;
 
         let mut cmd = CommandBuilder::new(shell);
+        // Forward the current environment verbatim. `std::env::vars()` only yields
+        // variables that are actually set, so `TERM`/`SHELL` are passed through
+        // when present (e.g. a Git Bash / MSYS / WSL-interop launch) and simply
+        // absent otherwise — native Windows consoles define neither.
         for (key, value) in std::env::vars() {
             cmd.env(key, value);
         }
@@ -454,6 +458,11 @@ pub fn record_session<W: Write + Send + 'static>(
     // Raw mode is entered only after the PTY is up so an early failure leaves the
     // terminal untouched. The guard restores cooked mode on any exit path.
     let _raw = RawModeGuard::enable()?;
+    // Platform terminal-mode setup, restored on drop: on Windows this enables the
+    // console's virtual-terminal input/output so host key presses reach the
+    // ConPTY child as VT sequences and its VT output renders; on Unix it is a
+    // no-op (the PTY already does this). Dropped after teardown, before the menu.
+    let _term_mode = platform::TerminalModeGuard::install()?;
     let mut resize_watcher = platform::ResizeWatcher::install()?;
     let mut stdin_poller = platform::StdinPoller::new()?;
 
