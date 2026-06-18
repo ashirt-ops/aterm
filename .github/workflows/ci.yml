@@ -2,7 +2,9 @@
 #
 # Runs build/test/clippy/fmt across Linux/macOS/Windows on every push and pull
 # request, and on every run produces optimized release binaries that are stored
-# as downloadable workflow artifacts. On pushes it also publishes GitHub
+# as downloadable workflow artifacts. Linux/Windows ship as tar.gz/zip; macOS
+# ships as a .dmg that, when signing secrets are present, is code-signed,
+# notarized, and stapled. On pushes it also publishes GitHub
 # Releases: a rolling "continuous" prerelease from `main`, and a versioned
 # release for `v*` tags. Publishing uses the GitHub-official `gh` CLI; every
 # action here is from the upstream actions/* org.
@@ -29,20 +31,31 @@ jobs:
     outputs:
       isContinuous: ${{ steps.info.outputs.isContinuous }}
       isRelease: ${{ steps.info.outputs.isRelease }}
+      signMac: ${{ steps.info.outputs.signMac }}
     steps:
       - name: Calculate run info
         id: info
         shell: bash
+        env:
+          # Secrets can't be referenced in step `if:` conditions, so probe for
+          # the macOS signing certificate here and expose the result as an
+          # output the build job can gate on.
+          MCERT: ${{ secrets.APPLE_CERTIFICATE }}
         run: |
           CONTINUOUS="false"
           RELEASE="false"
+          SIGN_MAC="false"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
               RELEASE="true"
           elif [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
               CONTINUOUS="true"
           fi
+          if [[ -n "$MCERT" ]]; then
+              SIGN_MAC="true"
+          fi
           echo "isContinuous=$CONTINUOUS" >> "$GITHUB_OUTPUT"
           echo "isRelease=$RELEASE" >> "$GITHUB_OUTPUT"
+          echo "signMac=$SIGN_MAC" >> "$GITHUB_OUTPUT"
 
   build:
     name: build / test / lint (${{ matrix.os }})
@@ -85,6 +98,38 @@ jobs:
       - name: Build release binary
         run: cargo build --release --verbose
 
+      # Import the Developer ID certificate into a temporary keychain so the
+      # release binary can be code-signed. Uses the same secrets as the ashirt
+      # repo (APPLE_CERTIFICATE / APPLE_CERTIFICATE_PASSWORD).
+      - name: Import signing certificate (macOS)
+        if: runner.os == 'macOS' && needs.run-info.outputs.signMac == 'true'
+        uses: Apple-Actions/import-codesign-certs@v7
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      # Sign the binary itself before it goes into the DMG. Hardened runtime +
+      # secure timestamp are required for the binary to pass notarization. The
+      # resolved identity is exported so the DMG-signing step can reuse it.
+      - name: Sign binary (macOS)
+        if: runner.os == 'macOS' && needs.run-info.outputs.signMac == 'true'
+        run: |
+          set -euo pipefail
+          bin="target/release/${{ matrix.bin }}"
+
+          # Resolve the imported Developer ID Application identity by hash so the
+          # signature is unambiguous regardless of the certificate's common name.
+          identity="$(security find-identity -v -p codesigning \
+            | grep 'Developer ID Application' | head -n1 | awk '{print $2}')"
+          if [[ -z "$identity" ]]; then
+              echo "No Developer ID Application identity found in keychain" >&2
+              exit 1
+          fi
+
+          codesign --force --options runtime --timestamp --sign "$identity" "$bin"
+          codesign --verify --strict --verbose=2 "$bin"
+          echo "SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+
       - name: Package artifact
         id: package
         shell: bash
@@ -100,11 +145,38 @@ jobs:
           if [ "$RUNNER_OS" == "Windows" ]; then
               asset="$pkg.zip"
               7z a "$asset" "$pkg" >/dev/null
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+              # Ship macOS as a compressed disk image holding the (signed)
+              # binary. A .dmg can be notarized AND stapled, so the artifact
+              # validates with Gatekeeper offline.
+              asset="$pkg.dmg"
+              hdiutil create -volname "aterm" -srcfolder "$pkg" -ov -format UDZO "$asset"
           else
               asset="$pkg.tar.gz"
               tar czf "$asset" "$pkg"
           fi
           echo "asset=$asset" >> "$GITHUB_OUTPUT"
+
+      # Sign, notarize, and staple the DMG. Stapling embeds the notarization
+      # ticket in the image so it passes Gatekeeper without a network round-trip.
+      - name: Notarize and staple DMG (macOS)
+        if: runner.os == 'macOS' && needs.run-info.outputs.signMac == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          asset="${{ steps.package.outputs.asset }}"
+
+          codesign --force --timestamp --sign "$SIGN_IDENTITY" "$asset"
+          xcrun notarytool store-credentials "AC_PASSWORD" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD"
+          xcrun notarytool submit "$asset" --keychain-profile "AC_PASSWORD" --wait
+          xcrun stapler staple "$asset"
+          xcrun stapler validate "$asset"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
