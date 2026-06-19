@@ -78,7 +78,7 @@ jobs:
             target_label: windows
             bin: aterm.exe
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install stable Rust toolchain
         shell: bash
