@@ -28,6 +28,11 @@ pub struct Cli {
     #[arg(long = "print-config", visible_alias = "pc")]
     pub print_config: bool,
 
+    /// Include secret values (the API secret key) in `--print-config` output.
+    /// Off by default, so the secret is masked unless explicitly requested.
+    #[arg(long = "show-secrets")]
+    pub show_secrets: bool,
+
     /// Reset saved configuration (soft reset).
     #[arg(long = "reset")]
     pub reset: bool,

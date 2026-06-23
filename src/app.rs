@@ -122,7 +122,7 @@ pub fn run(cli: Cli) -> Result<()> {
     // `--print-config` prints the resolved config and exits, after validation and
     // the update notice (matching the Go ordering).
     if cli.print_config {
-        println!("{config}");
+        println!("{}", config.print_config(cli.show_secrets));
         return Ok(());
     }
 
