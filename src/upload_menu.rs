@@ -15,8 +15,9 @@
 //! thin shell around the `tui` wrappers (which need a real TTY and can never run
 //! in CI). All decision logic that *can* be tested headlessly is factored into
 //! standalone pure functions — the selected-index → tag-id mapping
-//! ([`selected_tag_ids`]) and the file operations ([`rename_target`],
-//! [`rename_recording`], [`discard_recording`]) — and unit-tested below. The
+//! ([`selected_tag_ids`]), the file operations ([`rename_target`],
+//! [`rename_recording`], [`discard_recording`]), and the post-upload keep/delete
+//! control-flow decision ([`post_upload_action`]) — and unit-tested below. The
 //! interactive `*_flow` helpers and [`post_recording_menu`] are never exercised
 //! by the test suite.
 
@@ -186,6 +187,31 @@ pub fn discard_recording(path: &Path) -> std::io::Result<()> {
     std::fs::remove_file(path)
 }
 
+/// Control-flow result of the upload flow, telling [`post_recording_menu`] what
+/// to do once the upload (and the post-upload keep/delete prompt) is finished.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PostUpload {
+    /// The local recording is still on disk; re-present the menu as before.
+    KeepBrowsing,
+    /// The local recording was deleted after the upload; the menu must exit
+    /// rather than loop back and re-present a now-deleted file.
+    Discarded,
+}
+
+/// Maps the operator's post-upload "delete the local copy?" answer to the menu
+/// control-flow result.
+///
+/// Factored out as a pure function so the keep/delete decision can be unit
+/// tested without a TTY: `true` (delete) maps to [`PostUpload::Discarded`] so the
+/// loop exits, `false` (keep) maps to [`PostUpload::KeepBrowsing`] so it loops.
+pub fn post_upload_action(delete_requested: bool) -> PostUpload {
+    if delete_requested {
+        PostUpload::Discarded
+    } else {
+        PostUpload::KeepBrowsing
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Interactive flow. MANUAL/TTY-ONLY: never call from tests or headless paths.
 // ---------------------------------------------------------------------------
@@ -214,7 +240,14 @@ pub fn post_recording_menu(
             path.display()
         );
         match tui::select(&prompt, &options)?.as_str() {
-            MENU_UPLOAD => upload_flow(client, operation_slug, &path)?,
+            MENU_UPLOAD => {
+                // After a successful upload the operator is offered the chance to
+                // delete the local `.cast`. If they do, the file is gone, so we
+                // must exit rather than loop back and re-present a deleted file.
+                if upload_flow(client, operation_slug, &path)? == PostUpload::Discarded {
+                    return Ok(());
+                }
+            }
             MENU_RENAME => path = rename_flow(&path)?,
             MENU_DISCARD => {
                 if discard_flow(&path)? {
@@ -229,8 +262,17 @@ pub fn post_recording_menu(
     }
 }
 
-/// Collects a description and tags, then uploads the recording as evidence.
-fn upload_flow(client: &Client, operation_slug: &str, path: &Path) -> Result<(), MenuError> {
+/// Collects a description and tags, uploads the recording as evidence, then
+/// offers to delete the now-redundant local `.cast`.
+///
+/// Returns [`PostUpload::Discarded`] if the operator chose to delete the local
+/// recording (the caller must then stop looping, as the file is gone) and
+/// [`PostUpload::KeepBrowsing`] otherwise.
+fn upload_flow(
+    client: &Client,
+    operation_slug: &str,
+    path: &Path,
+) -> Result<PostUpload, MenuError> {
     let description = tui::required_input("Description for this evidence")?;
 
     let available = tags::list_tags(client, operation_slug)?;
@@ -255,7 +297,24 @@ fn upload_flow(client: &Client, operation_slug: &str, path: &Path) -> Result<(),
 
     let created = upload_evidence(client, &evidence, path)?;
     println!("{} Uploaded evidence {}", tui::green_check(), created.uuid);
-    Ok(())
+
+    // The recording is now safely in ASHIRT. These `.cast` files hold full
+    // session output and are written 0600 precisely because they are sensitive,
+    // so offer to delete the local copy instead of leaving it on disk
+    // indefinitely. The prompt defaults to keeping the file.
+    let delete_prompt = format!(
+        "Upload succeeded. Delete the local recording {}? This cannot be undone.",
+        path.display()
+    );
+    let action = post_upload_action(tui::confirm(&delete_prompt, false)?);
+    if action == PostUpload::Discarded {
+        discard_recording(path).map_err(|source| MenuError::Io {
+            path: path.display().to_string(),
+            source,
+        })?;
+        println!("Recording discarded.");
+    }
+    Ok(action)
 }
 
 /// Prompts for a new name and renames the recording, returning the new path.
@@ -453,5 +512,14 @@ mod tests {
         let missing = temp_path("discard-missing");
         let err = discard_recording(&missing).expect_err("missing file must error");
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn post_upload_action_maps_delete_choice_to_control_flow() {
+        // Deleting the local copy must signal the menu loop to exit so it never
+        // re-presents a now-deleted recording; keeping it must let the loop
+        // continue exactly as before.
+        assert_eq!(post_upload_action(true), PostUpload::Discarded);
+        assert_eq!(post_upload_action(false), PostUpload::KeepBrowsing);
     }
 }
