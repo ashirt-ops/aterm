@@ -301,28 +301,63 @@ impl Config {
     }
 }
 
-/// Human-readable rendering, mirroring the Go `PrintConfigTo` layout. This is
-/// for display only — use [`Config::to_yaml`] for serialization.
-impl fmt::Display for Config {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Current Configuration:")?;
-        writeln!(f, "\tConfig Version:  {}", self.config_version)?;
-        writeln!(f, "\tAPI Host:        {}", self.api_url)?;
-        writeln!(f, "\tOutput Base:     {}", self.output_dir)?;
-        writeln!(f, "\tAccess Key:      {}", self.access_key)?;
-        writeln!(f, "\tSecret Key:      {}", self.secret_key)?;
-        writeln!(f, "\tOutput Prefix:   {}", self.output_file_name)?;
-        writeln!(f, "\tOperation Slug:  {}", self.operation_slug)?;
-        writeln!(f, "\tRecording Shell: {}", self.recording_shell)?;
-        write!(
-            f,
-            "\tUpdate Check:    {}",
+/// Renders a credential as `(set)`/`(not set)` so its value is never echoed,
+/// matching the masking style used by the in-app settings menu.
+fn mask_secret(value: &str) -> &'static str {
+    if value.is_empty() {
+        "(not set)"
+    } else {
+        "(set)"
+    }
+}
+
+impl Config {
+    /// Renders the human-readable configuration, mirroring the Go
+    /// `PrintConfigTo` layout. The access key is always shown in full (it is an
+    /// identifier, not a secret); the secret key is shown in full only when
+    /// `show_secrets` is true, otherwise masked as `(set)`/`(not set)` so it is
+    /// never accidentally captured into recordings/scrollback.
+    pub fn print_config(&self, show_secrets: bool) -> String {
+        let secret = if show_secrets {
+            self.secret_key.as_str()
+        } else {
+            mask_secret(&self.secret_key)
+        };
+        format!(
+            "Current Configuration:\n\
+             \tConfig Version:  {}\n\
+             \tAPI Host:        {}\n\
+             \tOutput Base:     {}\n\
+             \tAccess Key:      {}\n\
+             \tSecret Key:      {}\n\
+             \tOutput Prefix:   {}\n\
+             \tOperation Slug:  {}\n\
+             \tRecording Shell: {}\n\
+             \tUpdate Check:    {}",
+            self.config_version,
+            self.api_url,
+            self.output_dir,
+            self.access_key,
+            secret,
+            self.output_file_name,
+            self.operation_slug,
+            self.recording_shell,
             if self.auto_update_check {
                 "enabled"
             } else {
                 "disabled"
-            }
+            },
         )
+    }
+}
+
+/// Human-readable rendering, mirroring the Go `PrintConfigTo` layout. This is
+/// for display only — use [`Config::to_yaml`] for serialization. The secret key
+/// is masked by default (the safe default for any accidental print); use
+/// [`Config::print_config`] with `show_secrets = true` to opt into cleartext.
+impl fmt::Display for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.print_config(false))
     }
 }
 
@@ -679,6 +714,70 @@ mod tests {
         assert_eq!(original, read_back);
 
         fs::remove_file(&path).ok();
+    }
+
+    /// The default human-readable render (Display / `--print-config` without
+    /// `--show-secrets`) masks the SECRET key but prints the ACCESS key in full
+    /// (the access key is an identifier, not a secret).
+    #[test]
+    fn display_masks_secret_but_shows_access_key() {
+        let cfg = Config {
+            access_key: "AKIDEXAMPLE12345".to_string(),
+            secret_key: "c2VjcmV0".to_string(),
+            ..Config::default()
+        };
+        let output = cfg.to_string();
+
+        // The secret value must be absent (masked).
+        assert!(
+            !output.contains(&cfg.secret_key),
+            "secret key value leaked in default Display output"
+        );
+        assert!(output.contains("Secret Key:      (set)"));
+
+        // The access key is an identifier and prints in full.
+        assert!(
+            output.contains(&cfg.access_key),
+            "access key value should be shown in full"
+        );
+        assert!(output.contains("Access Key:      AKIDEXAMPLE12345"));
+
+        // `print_config(false)` matches Display exactly.
+        assert_eq!(output, cfg.print_config(false));
+    }
+
+    /// `print_config(true)` (the `--print-config --show-secrets` path) prints
+    /// the secret key value in cleartext.
+    #[test]
+    fn print_config_with_show_secrets_reveals_secret() {
+        let cfg = Config {
+            access_key: "AKIDEXAMPLE12345".to_string(),
+            secret_key: "c2VjcmV0".to_string(),
+            ..Config::default()
+        };
+        let output = cfg.print_config(true);
+
+        assert!(
+            output.contains(&cfg.secret_key),
+            "secret key value should be present with show_secrets"
+        );
+        assert!(output.contains("Secret Key:      c2VjcmV0"));
+        // The masked marker must not be present when revealing.
+        assert!(!output.contains("Secret Key:      (set)"));
+    }
+
+    /// An empty secret renders as `(not set)` in the default (masked) render.
+    #[test]
+    fn display_masks_empty_secret_as_not_set() {
+        let cfg = Config {
+            access_key: String::new(),
+            secret_key: String::new(),
+            ..Config::default()
+        };
+        let output = cfg.to_string();
+        // Access key, shown in full, is empty here.
+        assert!(output.contains("Access Key:      \n"));
+        assert!(output.contains("Secret Key:      (not set)"));
     }
 
     #[test]
