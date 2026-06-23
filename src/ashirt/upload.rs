@@ -107,6 +107,10 @@ pub fn upload_evidence(
 
     let boundary = pick_boundary(&fields, &content);
     let body = serialize_multipart(&boundary, &fields, filename, &content);
+    // The assembled body now owns its own copy of every file byte, so release the
+    // raw file read before signing/sending. This keeps peak memory near one copy
+    // of the recording (the body) during the network round trip instead of two.
+    drop(content);
     let content_type = format!("multipart/form-data; boundary={boundary}");
 
     let path = format!("/operations/{}/evidence", evidence.operation_slug);
@@ -147,7 +151,16 @@ fn serialize_multipart(
     filename: &str,
     file_content: &[u8],
 ) -> Vec<u8> {
-    let mut body = Vec::new();
+    // Pre-reserve the exact final length so the buffer never reallocates while
+    // it fills. Without this, Vec's doubling growth can transiently hold roughly
+    // two copies of the (large) file bytes during the final grow, spiking peak
+    // memory; reserving up front caps the body at a single allocation.
+    let mut body = Vec::with_capacity(multipart_len(
+        boundary,
+        fields,
+        filename,
+        file_content.len(),
+    ));
     for (name, value) in fields {
         body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
         body.extend_from_slice(
@@ -168,6 +181,46 @@ fn serialize_multipart(
 
     body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
     body
+}
+
+/// Computes the exact serialized length of the multipart body produced by
+/// [`serialize_multipart`] for the given inputs, so the body buffer can be
+/// allocated once with the right capacity.
+///
+/// This MUST stay in lockstep with the byte layout emitted by
+/// [`serialize_multipart`]; the signature test guards that the bytes are
+/// correct, but an under-estimate here would only cost a reallocation, not
+/// change the wire bytes.
+fn multipart_len(
+    boundary: &str,
+    fields: &[(&str, &str)],
+    filename: &str,
+    file_len: usize,
+) -> usize {
+    // Constant header/literal sizes, computed from the format strings below.
+    const DELIM_FIXED: usize = "--".len() + "\r\n".len(); // `--{boundary}\r\n`
+    const FIELD_CD_FIXED: usize = "Content-Disposition: form-data; name=\"\"\r\n\r\n".len(); // minus {name}
+    const CRLF: usize = "\r\n".len();
+    const FILE_CD_FIXED: usize =
+        "Content-Disposition: form-data; name=\"file\"; filename=\"\"\r\n".len(); // minus {filename}
+    const FILE_CT: usize = "Content-Type: application/octet-stream\r\n\r\n".len();
+    const CLOSE_FIXED: usize = "----\r\n".len(); // `--{boundary}--\r\n` minus {boundary}
+
+    let bl = boundary.len();
+    let mut total = 0usize;
+    for (name, value) in fields {
+        total += DELIM_FIXED + bl; // `--{boundary}\r\n`
+        total += FIELD_CD_FIXED + name.len(); // disposition + blank line
+        total += value.len() + CRLF; // value + trailing CRLF
+    }
+
+    total += DELIM_FIXED + bl; // file part delimiter
+    total += FILE_CD_FIXED + filename.len(); // file disposition
+    total += FILE_CT; // file content type + blank line
+    total += file_len + CRLF; // file bytes + trailing CRLF
+
+    total += CLOSE_FIXED + bl; // `--{boundary}--\r\n`
+    total
 }
 
 /// Chooses a multipart boundary that does not appear in any field value or in
@@ -401,6 +454,26 @@ mod tests {
         let boundary = pick_boundary(&fields, &content);
         assert_ne!(boundary, default_token);
         assert!(!contains(&content, boundary.as_bytes()));
+    }
+
+    #[test]
+    fn multipart_len_matches_serialized_length() {
+        // The pre-reserved capacity must exactly equal the bytes produced, so the
+        // body buffer never reallocates and the wire bytes are unchanged.
+        let boundary = "aterm-boundary-x7Tf9pQzR2";
+        let fields = [
+            ("notes", "a recorded session"),
+            ("contentType", CONTENT_TYPE_TERMINAL_RECORDING),
+            ("tagIds", "[7,42]"),
+        ];
+        let filename = "recording.cast";
+        let content = b"{\"version\":3}\n[0.1,\"o\",\"hello\"]\n";
+
+        let predicted = multipart_len(boundary, &fields, filename, content.len());
+        let actual = serialize_multipart(boundary, &fields, filename, content);
+        assert_eq!(predicted, actual.len());
+        // And the buffer must have been allocated with exactly that capacity.
+        assert_eq!(actual.capacity(), predicted);
     }
 
     #[test]
