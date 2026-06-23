@@ -75,6 +75,11 @@ pub enum MenuError {
     /// silently overwrite another file).
     #[error("recording filename is not valid UTF-8: {path}")]
     NonUtf8Name { path: String },
+    /// The rename target already exists. Refused so a rename never silently
+    /// clobbers another file, matching the `create_new`/`O_EXCL` semantics used
+    /// when the recording is first created (see `src/menu.rs`).
+    #[error("cannot rename: a file named {target:?} already exists")]
+    TargetExists { target: String },
 }
 
 // ---------------------------------------------------------------------------
@@ -172,6 +177,31 @@ pub fn rename_recording(original: &Path, new_name: &str) -> Result<PathBuf, Menu
                 name: new_name.to_string(),
             });
         }
+    }
+
+    // Refuse to clobber an existing file. `std::fs::rename` silently replaces
+    // the destination on both Unix (`rename(2)`) and Windows
+    // (`MoveFileExW` with `MOVEFILE_REPLACE_EXISTING`), which would destroy an
+    // unrelated recording. This mirrors the `create_new`/`O_EXCL` discipline
+    // used when a recording is first written (`src/menu.rs`).
+    //
+    // NOTE: this is a check-then-act with a TOCTOU window — a file could be
+    // created at `target` between this check and the `rename` below. That race
+    // is acceptable for this interactive tool (single operator, no adversary
+    // racing their own filesystem), and there is no portable atomic
+    // rename-if-not-exists in the standard library.
+    //
+    // Renaming a file to its own name is a harmless no-op (the rename prompt
+    // pre-fills the current name, so pressing Enter unchanged is common); don't
+    // treat the source's own existence as a clobber.
+    let same_file = match (original.canonicalize(), target.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => original == target,
+    };
+    if !same_file && target.exists() {
+        return Err(MenuError::TargetExists {
+            target: target.display().to_string(),
+        });
     }
 
     std::fs::rename(original, &target).map_err(|source| MenuError::Io {
@@ -421,6 +451,69 @@ mod tests {
         assert!(from.exists(), "source must survive a rejected rename");
 
         std::fs::remove_file(&from).ok();
+    }
+
+    #[test]
+    fn rename_recording_refuses_to_overwrite_existing_target() {
+        let from = temp_path("rename-clobber-from");
+        std::fs::write(&from, b"source contents\n").expect("seed source recording");
+
+        // Pre-create the destination so the rename would otherwise overwrite it.
+        let to = temp_path("rename-clobber-to");
+        std::fs::write(&to, b"existing contents\n").expect("seed existing target");
+        let new_name = to.file_name().and_then(|n| n.to_str()).expect("utf-8 name");
+
+        let err = rename_recording(&from, new_name)
+            .expect_err("rename onto an existing file must be refused");
+        assert!(
+            matches!(err, MenuError::TargetExists { .. }),
+            "expected TargetExists, got {err:?}"
+        );
+
+        // Both files must be left exactly as they were: nothing clobbered.
+        assert!(from.exists(), "source must survive a refused rename");
+        assert!(to.exists(), "existing target must survive a refused rename");
+        assert_eq!(
+            std::fs::read(&from).expect("read source"),
+            b"source contents\n",
+            "source contents must be untouched"
+        );
+        assert_eq!(
+            std::fs::read(&to).expect("read target"),
+            b"existing contents\n",
+            "existing target contents must be untouched"
+        );
+
+        std::fs::remove_file(&from).ok();
+        std::fs::remove_file(&to).ok();
+    }
+
+    #[test]
+    fn rename_recording_to_same_name_succeeds() {
+        // Pressing Enter on the rename prompt without editing keeps the current
+        // filename, producing target == source. This must remain a benign no-op
+        // (fs::rename(x, x)) and not be rejected as a clobber of the file itself.
+        let path = temp_path("rename-same");
+        std::fs::write(&path, b"unchanged\n").expect("seed recording");
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .expect("utf-8 name");
+
+        let target = rename_recording(&path, name).expect("same-name rename should succeed");
+
+        assert_eq!(target, path);
+        assert!(
+            path.exists(),
+            "file must still exist after same-name rename"
+        );
+        assert_eq!(
+            std::fs::read(&path).expect("read recording"),
+            b"unchanged\n",
+            "contents must be untouched by a same-name rename"
+        );
+
+        std::fs::remove_file(&path).ok();
     }
 
     #[test]
