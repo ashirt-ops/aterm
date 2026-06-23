@@ -190,7 +190,15 @@ pub fn rename_recording(original: &Path, new_name: &str) -> Result<PathBuf, Menu
     // is acceptable for this interactive tool (single operator, no adversary
     // racing their own filesystem), and there is no portable atomic
     // rename-if-not-exists in the standard library.
-    if target.exists() {
+    //
+    // Renaming a file to its own name is a harmless no-op (the rename prompt
+    // pre-fills the current name, so pressing Enter unchanged is common); don't
+    // treat the source's own existence as a clobber.
+    let same_file = match (original.canonicalize(), target.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => original == target,
+    };
+    if !same_file && target.exists() {
         return Err(MenuError::TargetExists {
             target: target.display().to_string(),
         });
@@ -478,6 +486,34 @@ mod tests {
 
         std::fs::remove_file(&from).ok();
         std::fs::remove_file(&to).ok();
+    }
+
+    #[test]
+    fn rename_recording_to_same_name_succeeds() {
+        // Pressing Enter on the rename prompt without editing keeps the current
+        // filename, producing target == source. This must remain a benign no-op
+        // (fs::rename(x, x)) and not be rejected as a clobber of the file itself.
+        let path = temp_path("rename-same");
+        std::fs::write(&path, b"unchanged\n").expect("seed recording");
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .expect("utf-8 name");
+
+        let target = rename_recording(&path, name).expect("same-name rename should succeed");
+
+        assert_eq!(target, path);
+        assert!(
+            path.exists(),
+            "file must still exist after same-name rename"
+        );
+        assert_eq!(
+            std::fs::read(&path).expect("read recording"),
+            b"unchanged\n",
+            "contents must be untouched by a same-name rename"
+        );
+
+        std::fs::remove_file(&path).ok();
     }
 
     #[test]
