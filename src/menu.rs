@@ -28,9 +28,7 @@
 //! terminal. The interactive [`run`] entry point and [`start_recording`] wire
 //! those pure pieces into `tui`/`recorder` and are never exercised by tests.
 
-use std::collections::hash_map::RandomState;
 use std::fs::{self, File, OpenOptions};
-use std::hash::{BuildHasher, Hasher};
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
@@ -380,10 +378,11 @@ pub fn resolve_output_file_name(configured: &str) -> String {
 ///
 /// The random suffix keeps concurrent / repeated recordings from colliding (the
 /// output file is created with `create_new`). Like
-/// [`crate::ashirt::tags::random_tag_color`], this seeds off [`RandomState`]
-/// rather than pulling in the `rand` crate for a single value.
+/// [`crate::ashirt::tags::random_tag_color`], this draws its value from
+/// [`crate::random::random_u64`] (a real OS randomness source) rather than
+/// pulling in the `rand` crate for a single value.
 pub fn default_output_file_name() -> String {
-    let r = RandomState::new().build_hasher().finish();
+    let r = crate::random::random_u64();
     format!("recording_{r:016x}.cast")
 }
 
@@ -999,10 +998,8 @@ mod tests {
         // Build a unique temp target using the same path layout the recorder
         // uses (<output_dir>/<slug>/<file>) so the test exercises the real
         // create-dir + create-file path.
-        let base = std::env::temp_dir().join(format!(
-            "aterm-perms-{:016x}",
-            RandomState::new().build_hasher().finish()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("aterm-perms-{:016x}", crate::random::random_u64()));
         let path = output_path(
             base.to_str().expect("temp dir path is valid UTF-8"),
             "op-slug",

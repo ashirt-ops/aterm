@@ -111,13 +111,14 @@ dependencies = [
 
 [[package]]
 name = "aterm"
-version = "0.0.0"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "base64",
  "clap",
  "crossterm",
  "directories",
+ "getrandom 0.3.4",
  "hmac",
  "httpdate",
  "httpmock",

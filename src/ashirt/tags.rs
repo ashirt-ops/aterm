@@ -9,9 +9,6 @@
 //! Errors surface as [`HttpError`], the shared error type for the ASHIRT network
 //! layer; callers wrap it with `anyhow` at the application boundary.
 
-use std::collections::hash_map::RandomState;
-use std::hash::{BuildHasher, Hasher};
-
 use serde::{Deserialize, Serialize};
 
 use super::http::{Client, HttpError};
@@ -80,11 +77,10 @@ pub fn create_tag(
 /// Returns a random color name from the ASHIRT tag palette.
 ///
 /// Port of Go `RandomTagColor`. Rather than pull in the `rand` crate for a
-/// single pick, this seeds off [`RandomState`], whose hash keys the standard
-/// library randomizes from the OS on each construction: building a hasher and
-/// reading its finished (empty-input) state yields a process-random `u64`.
+/// single pick, this draws a `u64` from [`crate::random::random_u64`] (a real OS
+/// randomness source) and reduces it into the palette index.
 pub fn random_tag_color() -> &'static str {
-    let r = RandomState::new().build_hasher().finish();
+    let r = crate::random::random_u64();
     let idx = (r % TAG_COLORS.len() as u64) as usize;
     TAG_COLORS[idx]
 }
