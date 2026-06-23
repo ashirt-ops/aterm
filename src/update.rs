@@ -24,11 +24,19 @@ use std::time::Duration;
 use serde::Deserialize;
 use thiserror::Error;
 
+// The update check is a best-effort, non-critical background notice that runs on
+// the startup path before the user's first interaction (see `app::run`). It must
+// not delay startup on a slow, captive, or offline network, so its timeouts are
+// kept deliberately short — failing fast and silently skipping the notice is far
+// better than making the user wait. These are intentionally much tighter than the
+// ASHIRT API client, whose requests are user-initiated and load-bearing.
+
 /// Connection-establishment timeout for the update-check client.
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-/// Overall per-request timeout so an unresponsive GitHub never hangs the update
-/// check forever. Mirrors the ASHIRT client in [`crate::ashirt::http`].
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
+/// Overall per-request timeout so an unresponsive GitHub never delays the user's
+/// first interaction. Short on purpose: this is a non-blocking-feel update notice,
+/// not a critical request.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(4);
 
 /// Errors produced while checking for updates.
 #[derive(Debug, Error)]
