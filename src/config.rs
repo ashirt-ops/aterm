@@ -301,6 +301,16 @@ impl Config {
     }
 }
 
+/// Renders a credential as `(set)`/`(not set)` so its value is never echoed,
+/// matching the masking style used by the in-app settings menu.
+fn mask_secret(value: &str) -> &'static str {
+    if value.is_empty() {
+        "(not set)"
+    } else {
+        "(set)"
+    }
+}
+
 /// Human-readable rendering, mirroring the Go `PrintConfigTo` layout. This is
 /// for display only — use [`Config::to_yaml`] for serialization.
 impl fmt::Display for Config {
@@ -309,8 +319,9 @@ impl fmt::Display for Config {
         writeln!(f, "\tConfig Version:  {}", self.config_version)?;
         writeln!(f, "\tAPI Host:        {}", self.api_url)?;
         writeln!(f, "\tOutput Base:     {}", self.output_dir)?;
-        writeln!(f, "\tAccess Key:      {}", self.access_key)?;
-        writeln!(f, "\tSecret Key:      {}", self.secret_key)?;
+        // Credentials are masked: never echo the access/secret key values.
+        writeln!(f, "\tAccess Key:      {}", mask_secret(&self.access_key))?;
+        writeln!(f, "\tSecret Key:      {}", mask_secret(&self.secret_key))?;
         writeln!(f, "\tOutput Prefix:   {}", self.output_file_name)?;
         writeln!(f, "\tOperation Slug:  {}", self.operation_slug)?;
         writeln!(f, "\tRecording Shell: {}", self.recording_shell)?;
@@ -679,6 +690,45 @@ mod tests {
         assert_eq!(original, read_back);
 
         fs::remove_file(&path).ok();
+    }
+
+    /// The human-readable Display (used by `--print-config`) must never echo
+    /// the access/secret key values; they are masked as `(set)`/`(not set)`.
+    #[test]
+    fn display_masks_credentials() {
+        let cfg = Config {
+            access_key: "AKIDEXAMPLE12345".to_string(),
+            secret_key: "c2VjcmV0".to_string(),
+            ..Config::default()
+        };
+        let output = cfg.to_string();
+
+        // The actual credential values must be absent from the output.
+        assert!(
+            !output.contains(&cfg.secret_key),
+            "secret key value leaked in Display output"
+        );
+        assert!(
+            !output.contains(&cfg.access_key),
+            "access key value leaked in Display output"
+        );
+
+        // Both are shown as masked, since they are set.
+        assert!(output.contains("Access Key:      (set)"));
+        assert!(output.contains("Secret Key:      (set)"));
+    }
+
+    /// Empty credentials render as `(not set)` rather than a blank value.
+    #[test]
+    fn display_masks_empty_credentials_as_not_set() {
+        let cfg = Config {
+            access_key: String::new(),
+            secret_key: String::new(),
+            ..Config::default()
+        };
+        let output = cfg.to_string();
+        assert!(output.contains("Access Key:      (not set)"));
+        assert!(output.contains("Secret Key:      (not set)"));
     }
 
     #[test]
