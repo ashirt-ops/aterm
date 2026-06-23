@@ -301,10 +301,15 @@ impl<W: Write> Writer<W> {
 
     /// Writes a comment line (`# <text>`). The header must already be written so
     /// that the first line of the stream is never a comment.
+    ///
+    /// Embedded newlines in `text` are stripped so a single call can never emit
+    /// more than one line (and thus never inject a non-comment line that a parser
+    /// would treat as an event).
     pub fn write_comment(&mut self, text: &str) -> Result<(), CastError> {
         if !self.header_written {
             return Err(CastError::HeaderNotWritten);
         }
+        let text = text.replace(['\n', '\r'], " ");
         writeln!(self.inner, "# {text}")?;
         Ok(())
     }
@@ -490,6 +495,23 @@ mod tests {
             "[0.5,\"o\",\"bye\"]\n",
         );
         assert_eq!(text, expected);
+    }
+
+    #[test]
+    fn write_comment_strips_embedded_newlines_into_one_line() {
+        // A comment with embedded newlines must not split into multiple lines
+        // (which could inject a line a parser treats as a non-comment event).
+        let mut buf = Vec::new();
+        {
+            let mut w = Writer::new(&mut buf, 0.0);
+            w.write_header(&Header::new(80, 24)).unwrap();
+            w.write_comment("recorded\nby\r\naterm").unwrap();
+        }
+        let text = String::from_utf8(buf).unwrap();
+        // Two lines total: header + a single comment line.
+        assert_eq!(text.lines().count(), 2);
+        let comment = text.lines().nth(1).unwrap();
+        assert_eq!(comment, "# recorded by  aterm");
     }
 
     #[test]
