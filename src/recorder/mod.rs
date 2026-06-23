@@ -309,9 +309,15 @@ pub struct Recorder<W: Write> {
 impl<W: Write> Recorder<W> {
     /// Creates a recorder over `sink`, writing `header` immediately and starting
     /// the clock.
+    ///
+    /// A provenance comment (`# recorded by aterm <version>`) is emitted right
+    /// after the header so it is line 2 of every recording. Comments are not
+    /// events, so this does not advance the recording clock or affect interval
+    /// timing.
     pub fn start(sink: W, header: &Header) -> Result<Self, RecorderError> {
         let mut writer = Writer::new(sink, 0.0);
         writer.write_header(header)?;
+        writer.write_comment(concat!("recorded by aterm ", env!("CARGO_PKG_VERSION")))?;
         Ok(Self {
             writer,
             start: Instant::now(),
@@ -607,6 +613,12 @@ mod tests {
         assert_eq!(header["version"], 3);
         assert_eq!(header["term"]["cols"], 80);
 
+        // Line 2 is the provenance comment, not an event.
+        assert_eq!(
+            lines.next().unwrap(),
+            concat!("# recorded by aterm ", env!("CARGO_PKG_VERSION"))
+        );
+
         let out: Value = serde_json::from_str(lines.next().unwrap()).unwrap();
         assert_eq!(out[0], 0.0);
         assert_eq!(out[1], "o");
@@ -623,6 +635,34 @@ mod tests {
         assert_eq!(exit[2], "0");
 
         assert!(lines.next().is_none());
+    }
+
+    #[test]
+    fn recorder_stamps_provenance_comment_as_line_two() {
+        // The live recording path must stamp every cast: header on line 1, the
+        // provenance comment on line 2, before any clock-stamped event.
+        let mut rec = Recorder::start(Vec::new(), &Header::new(80, 24)).unwrap();
+        rec.output(0.0, "hi").unwrap();
+        let bytes = rec.finish().unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        let mut lines = text.lines();
+
+        // Line 1 is the header (and must not be a comment).
+        let line1 = lines.next().unwrap();
+        assert!(!line1.starts_with('#'));
+        let header: Value = serde_json::from_str(line1).unwrap();
+        assert_eq!(header["version"], 3);
+
+        // Line 2 is the provenance comment with the crate version.
+        assert_eq!(
+            lines.next().unwrap(),
+            format!("# recorded by aterm {}", env!("CARGO_PKG_VERSION"))
+        );
+
+        // Line 3 is the first real event (proves the comment precedes events).
+        let event: Value = serde_json::from_str(lines.next().unwrap()).unwrap();
+        assert_eq!(event[1], "o");
+        assert_eq!(event[2], "hi");
     }
 
     #[test]
@@ -700,8 +740,14 @@ mod tests {
         let header: Value = serde_json::from_str(lines.next().unwrap()).unwrap();
         assert_eq!(header["version"], 3);
 
+        // Line 2 is the provenance comment.
+        assert_eq!(
+            lines.next().unwrap(),
+            format!("# recorded by aterm {}", env!("CARGO_PKG_VERSION"))
+        );
+
         let events: Vec<Value> = lines
-            .filter(|l| !l.is_empty())
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
             .map(|l| serde_json::from_str(l).unwrap())
             .collect();
         assert!(
